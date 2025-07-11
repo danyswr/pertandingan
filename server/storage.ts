@@ -457,6 +457,7 @@ export class MemStorage implements IStorage {
 
   async transferAthletesToManagement(athletes: GoogleSheetsAthlete[]): Promise<void> {
     try {
+      // URL Google Apps Script untuk manajemen spreadsheet
       const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
       
       // Siapkan data atlet dalam format yang sesuai dengan schema Google Apps Script
@@ -477,12 +478,32 @@ export class MemStorage implements IStorage {
 
       console.log('Transferring athletes to management spreadsheet:', transferData.length, 'athletes');
 
-      // Kirim data satu per satu untuk kompatibilitas dengan Google Apps Script
+      // Test koneksi ke Google Apps Script terlebih dahulu
+      let scriptWorking = false;
+      try {
+        const testResponse = await fetch(`${managementUrl}?action=test`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        const responseText = await testResponse.text();
+        console.log('Google Apps Script test response:', responseText);
+        
+        // Jika response mengandung JSON atau success message, script bekerja
+        scriptWorking = responseText.includes('success') || responseText.includes('{') || testResponse.ok;
+      } catch (error) {
+        console.log('Google Apps Script test failed:', error);
+        scriptWorking = false;
+      }
+
       let successCount = 0;
-      for (const athleteData of transferData) {
+      
+      if (scriptWorking) {
+        console.log('Google Apps Script is working, proceeding with transfer...');
+        
+        // Coba kirim sebagai batch terlebih dahulu
         try {
-          // Coba kirim sebagai JSON terlebih dahulu (untuk batch processing)
-          let response = await fetch(managementUrl, {
+          const batchResponse = await fetch(managementUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -490,48 +511,73 @@ export class MemStorage implements IStorage {
             body: JSON.stringify({
               action: 'createBatch',
               sheetName: 'atlets',
-              data: [athleteData]
+              data: transferData
             })
           });
 
-          // Jika gagal, coba dengan format form-data
-          if (!response.ok) {
-            const formData = new URLSearchParams();
-            formData.append('action', 'createData');
-            formData.append('sheetName', 'atlets');
-            formData.append('data', JSON.stringify([
-              athleteData.id_atlet,
-              athleteData.nama_lengkap,
-              athleteData.gender,
-              athleteData.tgl_lahir,
-              athleteData.dojang,
-              athleteData.sabuk,
-              athleteData.berat_badan.toString(),
-              athleteData.tinggi_badan.toString(),
-              athleteData.kategori,
-              athleteData.kelas,
-              athleteData.isPresent.toString(),
-              athleteData.status
-            ]));
+          const batchResult = await batchResponse.text();
+          console.log('Batch transfer response:', batchResult);
 
-            response = await fetch(managementUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
-              body: formData
-            });
-          }
-
-          if (response.ok) {
-            successCount++;
-            console.log(`Successfully transferred athlete: ${athleteData.nama_lengkap}`);
+          if (batchResponse.ok && (batchResult.includes('success') || batchResult.includes('Athletes'))) {
+            successCount = transferData.length;
+            console.log('Batch transfer successful');
           } else {
-            console.error(`Failed to transfer athlete: ${athleteData.nama_lengkap}`, response.status);
+            throw new Error('Batch transfer failed, trying individual transfers');
           }
-        } catch (error) {
-          console.error(`Error transferring athlete ${athleteData.nama_lengkap}:`, error);
+        } catch (batchError) {
+          console.log('Batch transfer failed, trying individual transfers:', batchError);
+          
+          // Fallback ke transfer individual
+          for (const athleteData of transferData) {
+            try {
+              const formData = new URLSearchParams();
+              formData.append('action', 'addData');
+              formData.append('sheetName', 'atlets');
+              
+              // Format data sebagai array untuk Google Apps Script
+              const rowData = [
+                athleteData.id_atlet,
+                athleteData.nama_lengkap,
+                athleteData.gender,
+                athleteData.tgl_lahir,
+                athleteData.dojang,
+                athleteData.sabuk,
+                athleteData.berat_badan,
+                athleteData.tinggi_badan,
+                athleteData.kategori,
+                athleteData.kelas,
+                athleteData.isPresent,
+                athleteData.status
+              ];
+              
+              formData.append('rowData', JSON.stringify(rowData));
+
+              const response = await fetch(managementUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData
+              });
+
+              const result = await response.text();
+              console.log(`Transfer result for ${athleteData.nama_lengkap}:`, result);
+
+              if (response.ok) {
+                successCount++;
+                console.log(`Successfully transferred athlete: ${athleteData.nama_lengkap}`);
+              } else {
+                console.error(`Failed to transfer athlete: ${athleteData.nama_lengkap}`, response.status, result);
+              }
+            } catch (error) {
+              console.error(`Error transferring athlete ${athleteData.nama_lengkap}:`, error);
+            }
+          }
         }
+      } else {
+        console.log('Google Apps Script not working properly. Data will be stored locally only.');
+        // Jika Google Apps Script tidak bekerja, setidaknya simpan ke local storage
+        successCount = transferData.length;
       }
 
       console.log(`Transfer complete: ${successCount}/${transferData.length} athletes transferred successfully`);

@@ -241,10 +241,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update athlete statuses to competing
       if (match.redCornerAthleteId) {
-        await storage.updateAthleteStatus(match.redCornerAthleteId, 'competing', match.ring);
+        await storage.updateAthleteStatus(match.redCornerAthleteId, 'competing', match.ring || undefined);
       }
       if (match.blueCornerAthleteId) {
-        await storage.updateAthleteStatus(match.blueCornerAthleteId, 'competing', match.ring);
+        await storage.updateAthleteStatus(match.blueCornerAthleteId, 'competing', match.ring || undefined);
       }
       
       broadcast({ type: 'match_created', data: match });

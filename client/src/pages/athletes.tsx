@@ -15,8 +15,8 @@ import type { Athlete } from "@shared/schema";
 
 export default function Athletes() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [attendanceFilter, setAttendanceFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [competitionId, setCompetitionId] = useState("");
   
   const queryClient = useQueryClient();
@@ -70,8 +70,8 @@ export default function Athletes() {
   const filteredAthletes = athletes?.filter(athlete => {
     const matchesSearch = athlete.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          athlete.dojang.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !categoryFilter || athlete.kategori.toLowerCase().includes(categoryFilter.toLowerCase());
-    const matchesAttendance = !attendanceFilter || 
+    const matchesCategory = categoryFilter === 'all' || athlete.kategori.toLowerCase().includes(categoryFilter.toLowerCase());
+    const matchesAttendance = attendanceFilter === 'all' || 
                              (attendanceFilter === 'present' && athlete.isPresent) ||
                              (attendanceFilter === 'absent' && !athlete.isPresent);
     
@@ -142,7 +142,7 @@ export default function Athletes() {
                     <SelectValue placeholder="Semua Kategori" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Kategori</SelectItem>
+                    <SelectItem value="all">Semua Kategori</SelectItem>
                     <SelectItem value="kyorugi">Kyorugi</SelectItem>
                     <SelectItem value="poomsae">Poomsae</SelectItem>
                   </SelectContent>
@@ -153,7 +153,7 @@ export default function Athletes() {
                     <SelectValue placeholder="Semua Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Status</SelectItem>
+                    <SelectItem value="all">Semua Status</SelectItem>
                     <SelectItem value="present">Hadir</SelectItem>
                     <SelectItem value="absent">Tidak Hadir</SelectItem>
                   </SelectContent>

@@ -122,7 +122,17 @@ export class MemStorage implements IStorage {
 
     defaultCategories.forEach(category => {
       const id = this.currentCategoryId++;
-      this.categories.set(id, { ...category, id });
+      this.categories.set(id, { 
+        ...category, 
+        id,
+        gender: category.gender || null,
+        weightMin: category.weightMin || null,
+        weightMax: category.weightMax || null,
+        beltLevel: category.beltLevel || null,
+        maxParticipants: category.maxParticipants || null,
+        minParticipants: category.minParticipants || null,
+        isActive: category.isActive || null
+      });
     });
   }
 
@@ -136,7 +146,13 @@ export class MemStorage implements IStorage {
 
   async createAthlete(athlete: InsertAthlete): Promise<Athlete> {
     const id = this.currentAthleteId++;
-    const newAthlete: Athlete = { ...athlete, id };
+    const newAthlete: Athlete = { 
+      ...athlete, 
+      id,
+      status: athlete.status || null,
+      isPresent: athlete.isPresent || null,
+      competitionId: athlete.competitionId || null
+    };
     this.athletes.set(id, newAthlete);
     
     // Initialize athlete status
@@ -205,7 +221,17 @@ export class MemStorage implements IStorage {
 
   async createCategory(category: InsertCategory): Promise<Category> {
     const id = this.currentCategoryId++;
-    const newCategory: Category = { ...category, id };
+    const newCategory: Category = { 
+      ...category, 
+      id,
+      gender: category.gender || null,
+      weightMin: category.weightMin || null,
+      weightMax: category.weightMax || null,
+      beltLevel: category.beltLevel || null,
+      maxParticipants: category.maxParticipants || null,
+      minParticipants: category.minParticipants || null,
+      isActive: category.isActive || null
+    };
     this.categories.set(id, newCategory);
     return newCategory;
   }
@@ -216,7 +242,14 @@ export class MemStorage implements IStorage {
 
   async createGroup(group: InsertGroup): Promise<Group> {
     const id = this.currentGroupId++;
-    const newGroup: Group = { ...group, id };
+    const newGroup: Group = { 
+      ...group, 
+      id,
+      status: group.status || null,
+      categoryId: group.categoryId || null,
+      maxSize: group.maxSize || null,
+      currentSize: group.currentSize || null
+    };
     this.groups.set(id, newGroup);
     return newGroup;
   }
@@ -230,12 +263,12 @@ export class MemStorage implements IStorage {
       id: memberId,
       groupId,
       athleteId,
-      position: group.currentSize + 1,
+      position: (group.currentSize || 0) + 1,
       isEliminated: false
     });
     
     // Update group size
-    group.currentSize = (group.currentSize || 0) + 1;
+    group.currentSize = ((group.currentSize || 0) + 1);
     this.groups.set(groupId, group);
   }
 
@@ -246,7 +279,7 @@ export class MemStorage implements IStorage {
   async getActiveMatches(): Promise<ActiveMatch[]> {
     const activeMatches: ActiveMatch[] = [];
     
-    for (const match of this.matches.values()) {
+    for (const match of Array.from(this.matches.values())) {
       if (match.status === 'active') {
         const redAthlete = this.athletes.get(match.redCornerAthleteId!);
         const blueAthlete = this.athletes.get(match.blueCornerAthleteId!);
@@ -280,7 +313,20 @@ export class MemStorage implements IStorage {
 
   async createMatch(match: InsertMatch): Promise<Match> {
     const id = this.currentMatchId++;
-    const newMatch: Match = { ...match, id };
+    const newMatch: Match = { 
+      ...match, 
+      id,
+      status: match.status || null,
+      groupId: match.groupId || null,
+      redCornerAthleteId: match.redCornerAthleteId || null,
+      blueCornerAthleteId: match.blueCornerAthleteId || null,
+      winnerId: match.winnerId || null,
+      ring: match.ring || null,
+      round: match.round || null,
+      startTime: match.startTime || null,
+      endTime: match.endTime || null,
+      matchType: match.matchType || null
+    };
     this.matches.set(id, newMatch);
     return newMatch;
   }
@@ -323,7 +369,16 @@ export class MemStorage implements IStorage {
 
   async createTournamentResult(result: InsertTournamentResult): Promise<TournamentResult> {
     const id = this.currentResultId++;
-    const newResult: TournamentResult = { ...result, id };
+    const newResult: TournamentResult = { 
+      ...result, 
+      id,
+      categoryId: result.categoryId || null,
+      firstPlace: result.firstPlace || null,
+      secondPlace: result.secondPlace || null,
+      thirdPlace1: result.thirdPlace1 || null,
+      thirdPlace2: result.thirdPlace2 || null,
+      completedAt: result.completedAt || null
+    };
     this.tournamentResults.set(id, newResult);
     return newResult;
   }

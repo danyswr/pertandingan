@@ -9,10 +9,16 @@ import { Link } from "wouter";
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['/api/dashboard/stats'],
+    queryFn: () => fetch('/api/dashboard/stats').then(res => res.json()),
+    staleTime: 10000,
+    refetchInterval: 30000
   });
 
   const { data: activeMatches, isLoading: matchesLoading } = useQuery({
     queryKey: ['/api/dashboard/active-matches'],
+    queryFn: () => fetch('/api/dashboard/active-matches').then(res => res.json()),
+    staleTime: 10000,
+    refetchInterval: 30000
   });
 
   useRealtime();

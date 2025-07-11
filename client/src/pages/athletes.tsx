@@ -111,10 +111,47 @@ export default function Athletes() {
   // Fungsi untuk menghitung umur dari tanggal lahir
   const calculateAge = (birthDate: string): number => {
     try {
-      // Parse format Indonesia "Jakarta, 01-01-2000" atau "01-01-2000"
+      if (!birthDate) return 0;
+      
+      // Parse format Indonesia "Jakarta, 03 November 2018" atau "03 November 2018"
       const dateStr = birthDate.includes(',') ? birthDate.split(',')[1].trim() : birthDate;
-      const [day, month, year] = dateStr.split('-').map(num => parseInt(num));
-      const birth = new Date(year, month - 1, day);
+      
+      // Handle different date formats
+      let birth: Date;
+      
+      if (dateStr.includes(' ')) {
+        // Format: "03 November 2018"
+        const parts = dateStr.split(' ');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0]);
+          const monthName = parts[1];
+          const year = parseInt(parts[2]);
+          
+          // Map Indonesian month names to numbers
+          const monthMap: { [key: string]: number } = {
+            'januari': 0, 'februari': 1, 'maret': 2, 'april': 3, 'mei': 4, 'juni': 5,
+            'juli': 6, 'agustus': 7, 'september': 8, 'oktober': 9, 'november': 10, 'desember': 11,
+            'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
+            'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11
+          };
+          
+          const month = monthMap[monthName.toLowerCase()];
+          if (month !== undefined) {
+            birth = new Date(year, month, day);
+          } else {
+            return 0;
+          }
+        } else {
+          return 0;
+        }
+      } else if (dateStr.includes('-')) {
+        // Format: "01-01-2000"
+        const [day, month, year] = dateStr.split('-').map(num => parseInt(num));
+        birth = new Date(year, month - 1, day);
+      } else {
+        return 0;
+      }
+      
       const today = new Date();
       const age = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();

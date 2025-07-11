@@ -44,17 +44,17 @@ export default function Athletes() {
   // State untuk filter
   const [filters, setFilters] = useState<AthleteFilters>({
     search: '',
-    gender: '',
+    gender: 'all',
     beratMin: '',
     beratMax: '',
     tinggiMin: '',
     tinggiMax: '',
-    sabuk: '',
+    sabuk: 'all',
     umurMin: '',
     umurMax: '',
-    dojang: '',
-    kategori: '',
-    kelas: ''
+    dojang: 'all',
+    kategori: 'all',
+    kelas: 'all'
   });
   
   const { toast } = useToast();
@@ -141,7 +141,7 @@ export default function Athletes() {
       }
 
       // Gender filter
-      if (filters.gender && athlete.gender !== filters.gender) return false;
+      if (filters.gender && filters.gender !== 'all' && athlete.gender !== filters.gender) return false;
 
       // Berat badan range
       if (filters.beratMin && athlete.weight < parseInt(filters.beratMin)) return false;
@@ -152,7 +152,7 @@ export default function Athletes() {
       if (filters.tinggiMax && athlete.height > parseInt(filters.tinggiMax)) return false;
 
       // Sabuk filter
-      if (filters.sabuk && athlete.belt !== filters.sabuk) return false;
+      if (filters.sabuk && filters.sabuk !== 'all' && athlete.belt !== filters.sabuk) return false;
 
       // Umur range
       const age = calculateAge(athlete.birthDate);
@@ -160,13 +160,13 @@ export default function Athletes() {
       if (filters.umurMax && age > parseInt(filters.umurMax)) return false;
 
       // Dojang filter
-      if (filters.dojang && !athlete.dojang.toLowerCase().includes(filters.dojang.toLowerCase())) return false;
+      if (filters.dojang && filters.dojang !== 'all' && !athlete.dojang.toLowerCase().includes(filters.dojang.toLowerCase())) return false;
 
       // Kategori filter
-      if (filters.kategori && athlete.category !== filters.kategori) return false;
+      if (filters.kategori && filters.kategori !== 'all' && athlete.category !== filters.kategori) return false;
 
       // Kelas filter
-      if (filters.kelas && athlete.class !== filters.kelas) return false;
+      if (filters.kelas && filters.kelas !== 'all' && athlete.class !== filters.kelas) return false;
 
       return true;
     });
@@ -200,17 +200,17 @@ export default function Athletes() {
   const resetFilters = () => {
     setFilters({
       search: '',
-      gender: '',
+      gender: 'all',
       beratMin: '',
       beratMax: '',
       tinggiMin: '',
       tinggiMax: '',
-      sabuk: '',
+      sabuk: 'all',
       umurMin: '',
       umurMax: '',
-      dojang: '',
-      kategori: '',
-      kelas: ''
+      dojang: 'all',
+      kategori: 'all',
+      kelas: 'all'
     });
   };
 
@@ -291,7 +291,7 @@ export default function Athletes() {
                       <SelectValue placeholder="Semua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua</SelectItem>
+                      <SelectItem value="all">Semua</SelectItem>
                       {filterOptions.genders?.map(gender => (
                         <SelectItem key={gender} value={gender}>{gender}</SelectItem>
                       ))}
@@ -306,7 +306,7 @@ export default function Athletes() {
                       <SelectValue placeholder="Semua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua</SelectItem>
+                      <SelectItem value="all">Semua</SelectItem>
                       {filterOptions.belts?.map(belt => (
                         <SelectItem key={belt} value={belt}>{belt}</SelectItem>
                       ))}
@@ -321,7 +321,7 @@ export default function Athletes() {
                       <SelectValue placeholder="Semua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua</SelectItem>
+                      <SelectItem value="all">Semua</SelectItem>
                       {filterOptions.categories?.map(category => (
                         <SelectItem key={category} value={category}>{category}</SelectItem>
                       ))}
@@ -336,7 +336,7 @@ export default function Athletes() {
                       <SelectValue placeholder="Semua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua</SelectItem>
+                      <SelectItem value="all">Semua</SelectItem>
                       {filterOptions.classes?.map(cls => (
                         <SelectItem key={cls} value={cls}>{cls}</SelectItem>
                       ))}
@@ -351,7 +351,7 @@ export default function Athletes() {
                       <SelectValue placeholder="Semua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua</SelectItem>
+                      <SelectItem value="all">Semua</SelectItem>
                       {filterOptions.dojangs?.map(dojang => (
                         <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
                       ))}

@@ -7,7 +7,9 @@ import type {
   Match, 
   InsertMatch,
   DashboardStats,
-  ActiveMatch
+  ActiveMatch,
+  GoogleSheetsCompetition,
+  GoogleSheetsAthlete
 } from "@shared/schema";
 
 export const api = {
@@ -68,7 +70,17 @@ export const api = {
   exportResults: (format: 'excel' | 'pdf') =>
     fetch(`/api/export/results?format=${format}`).then(res => res.json()),
 
-  // Google Sheets sync
+  // Google Sheets integration
+  getCompetitionsFromGoogleSheets: (): Promise<GoogleSheetsCompetition[]> =>
+    fetch('/api/google-sheets/competitions').then(res => res.json()),
+
+  getAthletesFromCompetition: (competitionId: string): Promise<GoogleSheetsAthlete[]> =>
+    fetch(`/api/google-sheets/athletes/${competitionId}`).then(res => res.json()),
+
+  transferAthletesToManagement: (athletes: GoogleSheetsAthlete[]): Promise<{ message: string; count: number }> =>
+    apiRequest('POST', '/api/google-sheets/transfer-athletes', { athletes }).then(res => res.json()),
+
+  // Google Sheets sync (legacy)
   syncToGoogleSheets: (data: any, action: string) =>
     apiRequest('POST', '/api/sheets/sync', { data, action }).then(res => res.json())
 };

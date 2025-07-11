@@ -154,12 +154,27 @@ export interface ActiveMatch {
 }
 
 export interface GoogleSheetsAthlete {
-  id_atlet: string;
-  nama_lengkap: string;
+  rowIndex: number;
+  timestamp: string;
+  registrationId: string;
+  idKejuaraan: string;
+  nama: string;
   gender: string;
-  dojang: string;
   sabuk: string;
-  berat_badan: number;
-  tinggi_badan: number;
+  tempatTanggalLahir: string;
+  dojang: string;
+  berat: string;
+  tinggi: string;
   kategori: string;
+  kelas: string;
+  orderJersey: string;
+  jerseySize: string;
+}
+
+export interface GoogleSheetsCompetition {
+  id: string;
+  nama: string;
+  deskripsi: string;
+  poster: string;
+  status: number;
 }

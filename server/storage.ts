@@ -61,6 +61,9 @@ export interface IStorage {
   
   // Google Sheets Integration
   syncAthletesFromGoogleSheets(competitionId?: string): Promise<Athlete[]>;
+  getCompetitionsFromGoogleSheets(): Promise<GoogleSheetsCompetition[]>;
+  getAthletesFromCompetition(competitionId: string): Promise<GoogleSheetsAthlete[]>;
+  transferAthletesToManagement(athletes: GoogleSheetsAthlete[]): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -414,6 +417,74 @@ export class MemStorage implements IStorage {
       return Array.from(this.athletes.values());
     } catch (error) {
       console.error('Failed to sync from Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  async getCompetitionsFromGoogleSheets(): Promise<GoogleSheetsCompetition[]> {
+    try {
+      const url = 'https://script.google.com/macros/s/AKfycbxBdFaCAXRAVjZYoEnWlJ7He7yeXjZrTYY11YsCjOLTmB-Ewe58jEKh97iXRdthIGhiMA/exec';
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching competitions:', error);
+      throw error;
+    }
+  }
+
+  async getAthletesFromCompetition(competitionId: string): Promise<GoogleSheetsAthlete[]> {
+    try {
+      const url = `https://script.google.com/macros/s/AKfycbxBdFaCAXRAVjZYoEnWlJ7He7yeXjZrTYY11YsCjOLTmB-Ewe58jEKh97iXRdthIGhiMA/exec?action=getAthletes&competitionId=${encodeURIComponent(competitionId)}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching athletes:', error);
+      throw error;
+    }
+  }
+
+  async transferAthletesToManagement(athletes: GoogleSheetsAthlete[]): Promise<void> {
+    try {
+      const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
+      
+      for (const athlete of athletes) {
+        const formData = new URLSearchParams();
+        formData.append('action', 'create');
+        formData.append('id_atlet', athlete.registrationId);
+        formData.append('nama_lengkap', athlete.nama);
+        formData.append('gender', athlete.gender);
+        formData.append('dojang', athlete.dojang);
+        formData.append('sabuk', athlete.sabuk);
+        formData.append('berat_badan', athlete.berat);
+        formData.append('tinggi_badan', athlete.tinggi);
+        formData.append('kategori', athlete.kategori);
+
+        const response = await fetch(managementUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to transfer athlete ${athlete.nama}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error transferring athletes:', error);
       throw error;
     }
   }

@@ -343,6 +343,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Google Sheets competition and athlete management routes
+  app.get('/api/google-sheets/competitions', async (req, res) => {
+    try {
+      const competitions = await storage.getCompetitionsFromGoogleSheets();
+      res.json(competitions);
+    } catch (error) {
+      console.error('Error fetching competitions:', error);
+      res.status(500).json({ error: 'Failed to fetch competitions from Google Sheets' });
+    }
+  });
+
+  app.get('/api/google-sheets/athletes/:competitionId', async (req, res) => {
+    try {
+      const { competitionId } = req.params;
+      const athletes = await storage.getAthletesFromCompetition(competitionId);
+      res.json(athletes);
+    } catch (error) {
+      console.error('Error fetching athletes:', error);
+      res.status(500).json({ error: 'Failed to fetch athletes from Google Sheets' });
+    }
+  });
+
+  app.post('/api/google-sheets/transfer-athletes', async (req, res) => {
+    try {
+      const { athletes } = req.body;
+      
+      if (!athletes || !Array.isArray(athletes)) {
+        return res.status(400).json({ error: 'Athletes array is required' });
+      }
+
+      await storage.transferAthletesToManagement(athletes);
+      broadcast({ type: 'athletes_transferred', data: { count: athletes.length } });
+      
+      res.json({ 
+        message: 'Athletes transferred successfully', 
+        count: athletes.length 
+      });
+    } catch (error) {
+      console.error('Error transferring athletes:', error);
+      res.status(500).json({ error: 'Failed to transfer athletes to management spreadsheet' });
+    }
+  });
+
   // Google Sheets integration routes
   app.post('/api/sheets/sync', async (req, res) => {
     try {

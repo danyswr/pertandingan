@@ -1,289 +1,251 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Header } from "@/components/layout/header";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Header } from "@/components/layout/header";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
-import { api } from "@/lib/api";
-import { useRealtime } from "@/hooks/use-realtime";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import type { Athlete } from "@shared/schema";
+import { api } from "@/lib/api";
+import type { GoogleSheetsCompetition, GoogleSheetsAthlete } from "@shared/schema";
 
 export default function Athletes() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [attendanceFilter, setAttendanceFilter] = useState("all");
-  const [competitionId, setCompetitionId] = useState("");
-  
-  const queryClient = useQueryClient();
+  const [selectedCompetition, setSelectedCompetition] = useState<GoogleSheetsCompetition | null>(null);
+  const [selectedAthletes, setSelectedAthletes] = useState<GoogleSheetsAthlete[]>([]);
+  const [showCompetitionDialog, setShowCompetitionDialog] = useState(false);
+  const [showAthleteDialog, setShowAthleteDialog] = useState(false);
   const { toast } = useToast();
-  useRealtime();
+  const queryClient = useQueryClient();
 
-  const { data: athletes, isLoading, refetch } = useQuery({
-    queryKey: ['/api/athletes'],
-    queryFn: api.getAthletes
+  // Fetch competitions from Google Sheets
+  const { data: competitions, isLoading: competitionsLoading } = useQuery({
+    queryKey: ['google-sheets-competitions'],
+    queryFn: api.getCompetitionsFromGoogleSheets,
+    enabled: showCompetitionDialog
   });
 
-  const syncMutation = useMutation({
-    mutationFn: () => api.syncAthletes(competitionId),
+  // Fetch athletes from selected competition
+  const { data: competitionAthletes, isLoading: athletesLoading } = useQuery({
+    queryKey: ['google-sheets-athletes', selectedCompetition?.id],
+    queryFn: () => api.getAthletesFromCompetition(selectedCompetition!.id),
+    enabled: !!selectedCompetition && showAthleteDialog
+  });
+
+  // Transfer athletes mutation
+  const transferAthletesMutation = useMutation({
+    mutationFn: api.transferAthletesToManagement,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
       toast({
-        title: "Sync Successful",
-        description: `${data.count} athletes synchronized from Google Sheets`,
+        title: "Transfer Berhasil",
+        description: `${data.count} atlet telah dipindahkan ke sistem manajemen`,
       });
+      setShowAthleteDialog(false);
+      setSelectedAthletes([]);
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
     },
     onError: (error) => {
       toast({
-        title: "Sync Failed",
-        description: "Failed to sync athletes from Google Sheets",
+        title: "Transfer Gagal",
+        description: "Terjadi kesalahan saat memindahkan data atlet",
         variant: "destructive",
       });
     }
   });
 
-  const attendanceMutation = useMutation({
-    mutationFn: ({ id, isPresent }: { id: number; isPresent: boolean }) =>
-      api.updateAthleteAttendance(id, isPresent),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
-    }
-  });
-
-  const handleAttendanceChange = (athlete: Athlete, isPresent: boolean) => {
-    attendanceMutation.mutate({ id: athlete.id, isPresent });
+  const handleSelectCompetition = (competition: GoogleSheetsCompetition) => {
+    setSelectedCompetition(competition);
+    setShowCompetitionDialog(false);
+    setShowAthleteDialog(true);
   };
 
-  const handleSync = () => {
-    syncMutation.mutate();
-  };
-
-  const handleRefresh = () => {
-    refetch();
-  };
-
-  // Filter athletes based on search and filters
-  const filteredAthletes = athletes?.filter(athlete => {
-    const matchesSearch = athlete.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         athlete.dojang.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || athlete.kategori.toLowerCase().includes(categoryFilter.toLowerCase());
-    const matchesAttendance = attendanceFilter === 'all' || 
-                             (attendanceFilter === 'present' && athlete.isPresent) ||
-                             (attendanceFilter === 'absent' && !athlete.isPresent);
-    
-    return matchesSearch && matchesCategory && matchesAttendance;
-  }) || [];
-
-  const getStatusBadge = (athlete: Athlete) => {
-    if (!athlete.isPresent) {
-      return <Badge variant="secondary" className="bg-gray-100 text-gray-800">Tidak Hadir</Badge>;
-    }
-    
-    switch (athlete.status) {
-      case 'competing':
-        return <Badge className="bg-orange-100 text-orange-800 animate-pulse">Sedang Bertanding</Badge>;
-      case 'available':
-        return <Badge className="bg-green-100 text-green-800">Siap Bertanding</Badge>;
-      case 'eliminated':
-        return <Badge variant="destructive">Tersingkir</Badge>;
-      default:
-        return <Badge variant="secondary">Unknown</Badge>;
+  const handleToggleAthlete = (athlete: GoogleSheetsAthlete, checked: boolean) => {
+    if (checked) {
+      setSelectedAthletes(prev => [...prev, athlete]);
+    } else {
+      setSelectedAthletes(prev => prev.filter(a => a.registrationId !== athlete.registrationId));
     }
   };
 
-  const getBeltColor = (belt: string) => {
-    const colors = {
-      'Putih': 'bg-gray-100 text-gray-800',
-      'Kuning': 'bg-yellow-100 text-yellow-800',
-      'Hijau': 'bg-green-100 text-green-800',
-      'Biru': 'bg-blue-100 text-blue-800',
-      'Merah': 'bg-red-100 text-red-800',
-      'Hitam': 'bg-gray-900 text-white'
-    };
-    return colors[belt as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+  const handleSelectAll = (checked: boolean) => {
+    if (checked && competitionAthletes) {
+      setSelectedAthletes(competitionAthletes);
+    } else {
+      setSelectedAthletes([]);
+    }
+  };
+
+  const handleTransferAthletes = () => {
+    if (selectedAthletes.length === 0) {
+      toast({
+        title: "Pilih Atlet",
+        description: "Silakan pilih minimal satu atlet untuk dipindahkan",
+        variant: "destructive",
+      });
+      return;
+    }
+    transferAthletesMutation.mutate(selectedAthletes);
   };
 
   return (
-    <>
+    <div className="p-6">
       <Header 
         title="Manajemen Atlet" 
-        subtitle="Kelola kehadiran dan data atlet"
-        onRefresh={handleRefresh}
+        subtitle="Kelola data atlet dan sinkronisasi dengan Google Sheets"
       />
       
-      <LoadingOverlay isVisible={isLoading || syncMutation.isPending} />
+      <LoadingOverlay isVisible={competitionsLoading || athletesLoading || transferAthletesMutation.isPending} />
       
-      <main className="p-6">
-        <Card>
-          {/* Header with Search and Filters */}
-          <CardHeader className="border-b border-tkd-gray-200">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-              <div>
-                <h3 className="text-lg font-semibold text-tkd-gray-900">Manajemen Atlet</h3>
-                <p className="text-tkd-gray-500">
-                  Total: {athletes?.length || 0} | Hadir: {filteredAthletes.filter(a => a.isPresent).length}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-4">
-                <Input
-                  type="text"
-                  placeholder="Cari atlet..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-64"
-                />
-                
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Semua Kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Kategori</SelectItem>
-                    <SelectItem value="kyorugi">Kyorugi</SelectItem>
-                    <SelectItem value="poomsae">Poomsae</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <Select value={attendanceFilter} onValueChange={setAttendanceFilter}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Semua Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Status</SelectItem>
-                    <SelectItem value="present">Hadir</SelectItem>
-                    <SelectItem value="absent">Tidak Hadir</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <div className="flex items-center space-x-2">
-                  <Input
-                    type="text"
-                    placeholder="Competition ID (optional)"
-                    value={competitionId}
-                    onChange={(e) => setCompetitionId(e.target.value)}
-                    className="w-48"
-                  />
-                  <Button onClick={handleSync} disabled={syncMutation.isPending}>
-                    <i className="fas fa-sync mr-2"></i>
-                    Sync from Google Sheets
-                  </Button>
-                </div>
-              </div>
+      {/* Main Action Card */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
+              <i className="fas fa-download text-white"></i>
             </div>
+            Import Atlet dari Google Sheets
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground mb-4">
+            Ambil data atlet dari spreadsheet kejuaraan dan pindahkan ke sistem manajemen turnamen.
+          </p>
+          <Dialog open={showCompetitionDialog} onOpenChange={setShowCompetitionDialog}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <i className="fas fa-table mr-2"></i>
+                Pilih Kejuaraan
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Pilih Kejuaraan dari Google Sheets</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {competitions?.map((competition) => (
+                  <Card 
+                    key={competition.id} 
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handleSelectCompetition(competition)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">{competition.nama}</h3>
+                          <p className="text-sm text-muted-foreground">{competition.deskripsi}</p>
+                          <p className="text-xs text-muted-foreground mt-1">ID: {competition.id}</p>
+                        </div>
+                        <Badge variant={competition.status === 1 ? "default" : "secondary"}>
+                          {competition.status === 1 ? "Aktif" : "Selesai"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      {/* Athletes Selection Dialog */}
+      <Dialog open={showAthleteDialog} onOpenChange={setShowAthleteDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>
+              Pilih Atlet dari: {selectedCompetition?.nama}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Select All */}
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="select-all"
+                  checked={selectedAthletes.length === competitionAthletes?.length && competitionAthletes?.length > 0}
+                  onCheckedChange={handleSelectAll}
+                />
+                <label htmlFor="select-all" className="text-sm font-medium">
+                  Pilih Semua ({competitionAthletes?.length || 0} atlet)
+                </label>
+              </div>
+              <Badge variant="secondary">
+                {selectedAthletes.length} dipilih
+              </Badge>
+            </div>
+
+            {/* Athletes List */}
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {competitionAthletes?.map((athlete) => (
+                <div 
+                  key={athlete.registrationId} 
+                  className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={selectedAthletes.some(a => a.registrationId === athlete.registrationId)}
+                    onCheckedChange={(checked) => handleToggleAthlete(athlete, checked as boolean)}
+                  />
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <p className="font-medium">{athlete.nama}</p>
+                      <p className="text-xs text-muted-foreground">{athlete.dojang}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm">{athlete.gender} - {athlete.sabuk}</p>
+                      <p className="text-xs text-muted-foreground">{athlete.berat}kg / {athlete.tinggi}cm</p>
+                    </div>
+                    <div>
+                      <p className="text-sm">{athlete.kategori}</p>
+                      <p className="text-xs text-muted-foreground">Kelas: {athlete.kelas}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setShowAthleteDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={handleTransferAthletes}
+                disabled={selectedAthletes.length === 0 || transferAthletesMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <i className="fas fa-upload mr-2"></i>
+                Transfer {selectedAthletes.length} Atlet
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Current Selection Summary */}
+      {selectedCompetition && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Kejuaraan Terpilih</CardTitle>
           </CardHeader>
-          
-          {/* Athletes Table */}
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-tkd-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Atlet
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Dojang
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Sabuk
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Kategori
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Berat/Tinggi
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Kehadiran
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-tkd-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-tkd-gray-200">
-                  {filteredAthletes.length > 0 ? (
-                    filteredAthletes.map((athlete) => (
-                      <tr key={athlete.id} className="hover:bg-tkd-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-tkd-gray-300 rounded-full flex items-center justify-center">
-                              <i className="fas fa-user text-tkd-gray-600"></i>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-tkd-gray-900">
-                                {athlete.nama_lengkap}
-                              </div>
-                              <div className="text-sm text-tkd-gray-500">
-                                {athlete.gender}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-tkd-gray-900">
-                          {athlete.dojang}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge className={getBeltColor(athlete.sabuk)}>
-                            {athlete.sabuk}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-tkd-gray-900">
-                          {athlete.kategori}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-tkd-gray-900">
-                          {athlete.berat_badan}kg / {athlete.tinggi_badan}cm
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              checked={athlete.isPresent}
-                              onCheckedChange={(checked) => 
-                                handleAttendanceChange(athlete, !!checked)
-                              }
-                              disabled={attendanceMutation.isPending}
-                            />
-                            <span className={`text-sm font-medium ${
-                              athlete.isPresent ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {athlete.isPresent ? 'Hadir' : 'Tidak Hadir'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {getStatusBadge(athlete)}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-tkd-gray-500">
-                        {athletes?.length === 0 ? (
-                          <div>
-                            <i className="fas fa-users text-4xl mb-4 text-tkd-gray-300"></i>
-                            <p className="text-lg font-medium mb-2">Belum ada data atlet</p>
-                            <p className="text-sm">Sync data dari Google Sheets untuk memulai</p>
-                          </div>
-                        ) : (
-                          <div>
-                            <i className="fas fa-search text-4xl mb-4 text-tkd-gray-300"></i>
-                            <p className="text-lg font-medium mb-2">Tidak ada hasil</p>
-                            <p className="text-sm">Coba ubah filter pencarian Anda</p>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">{selectedCompetition.nama}</h3>
+                <p className="text-sm text-muted-foreground">{selectedCompetition.deskripsi}</p>
+              </div>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAthleteDialog(true)}
+                disabled={!competitionAthletes}
+              >
+                <i className="fas fa-users mr-2"></i>
+                Lihat Atlet ({competitionAthletes?.length || 0})
+              </Button>
             </div>
           </CardContent>
         </Card>
-      </main>
-    </>
+      )}
+    </div>
   );
 }

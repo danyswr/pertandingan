@@ -15,28 +15,10 @@ const navigation = [
     section: "athletes"
   },
   {
-    name: "Kategori",
-    href: "/categories",
-    icon: "fas fa-layer-group",
-    section: "categories"
-  },
-  {
     name: "Pertandingan",
     href: "/matches",
     icon: "fas fa-trophy",
     section: "matches"
-  },
-  {
-    name: "Anti-Bentrok",
-    href: "/anti-clash",
-    icon: "fas fa-shield-alt",
-    section: "anti-clash"
-  },
-  {
-    name: "Export & Laporan",
-    href: "/reports",
-    icon: "fas fa-file-export",
-    section: "reports"
   }
 ];
 

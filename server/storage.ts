@@ -459,30 +459,103 @@ export class MemStorage implements IStorage {
     try {
       const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
       
-      for (const athlete of athletes) {
-        const formData = new URLSearchParams();
-        formData.append('action', 'create');
-        formData.append('id_atlet', athlete.registrationId);
-        formData.append('nama_lengkap', athlete.nama);
-        formData.append('gender', athlete.gender);
-        formData.append('dojang', athlete.dojang);
-        formData.append('sabuk', athlete.sabuk);
-        formData.append('berat_badan', athlete.berat);
-        formData.append('tinggi_badan', athlete.tinggi);
-        formData.append('kategori', athlete.kategori);
+      // Siapkan data atlet dalam format yang sesuai dengan schema Google Apps Script
+      const transferData = athletes.map(athlete => ({
+        id_atlet: athlete.registrationId,
+        nama_lengkap: athlete.nama,
+        gender: athlete.gender,
+        tgl_lahir: athlete.tempatTanggalLahir || '',
+        dojang: athlete.dojang,
+        sabuk: athlete.sabuk,
+        berat_badan: parseFloat(athlete.berat) || 0,
+        tinggi_badan: parseFloat(athlete.tinggi) || 0,
+        kategori: athlete.kategori,
+        kelas: athlete.kelas || '',
+        isPresent: false,
+        status: 'available'
+      }));
 
-        const response = await fetch(managementUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: formData
-        });
+      console.log('Transferring athletes to management spreadsheet:', transferData.length, 'athletes');
 
-        if (!response.ok) {
-          console.error(`Failed to transfer athlete ${athlete.nama}`);
+      // Kirim data satu per satu untuk kompatibilitas dengan Google Apps Script
+      let successCount = 0;
+      for (const athleteData of transferData) {
+        try {
+          // Coba kirim sebagai JSON terlebih dahulu (untuk batch processing)
+          let response = await fetch(managementUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'createBatch',
+              sheetName: 'atlets',
+              data: [athleteData]
+            })
+          });
+
+          // Jika gagal, coba dengan format form-data
+          if (!response.ok) {
+            const formData = new URLSearchParams();
+            formData.append('action', 'createData');
+            formData.append('sheetName', 'atlets');
+            formData.append('data', JSON.stringify([
+              athleteData.id_atlet,
+              athleteData.nama_lengkap,
+              athleteData.gender,
+              athleteData.tgl_lahir,
+              athleteData.dojang,
+              athleteData.sabuk,
+              athleteData.berat_badan.toString(),
+              athleteData.tinggi_badan.toString(),
+              athleteData.kategori,
+              athleteData.kelas,
+              athleteData.isPresent.toString(),
+              athleteData.status
+            ]));
+
+            response = await fetch(managementUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: formData
+            });
+          }
+
+          if (response.ok) {
+            successCount++;
+            console.log(`Successfully transferred athlete: ${athleteData.nama_lengkap}`);
+          } else {
+            console.error(`Failed to transfer athlete: ${athleteData.nama_lengkap}`, response.status);
+          }
+        } catch (error) {
+          console.error(`Error transferring athlete ${athleteData.nama_lengkap}:`, error);
         }
       }
+
+      console.log(`Transfer complete: ${successCount}/${transferData.length} athletes transferred successfully`);
+
+      // Juga simpan ke storage lokal untuk backup
+      for (const athleteData of transferData) {
+        const newAthlete: Athlete = { 
+          id: this.currentAthleteId++,
+          idAtlet: athleteData.id_atlet,
+          namaLengkap: athleteData.nama_lengkap,
+          gender: athleteData.gender,
+          tglLahir: athleteData.tgl_lahir,
+          dojang: athleteData.dojang,
+          sabuk: athleteData.sabuk,
+          beratBadan: athleteData.berat_badan,
+          tinggiBadan: athleteData.tinggi_badan,
+          kategori: athleteData.kategori,
+          kelas: athleteData.kelas,
+          isPresent: false
+        };
+        this.athletes.set(newAthlete.id, newAthlete);
+      }
+
+      console.log(`Successfully transferred ${athletes.length} athletes to management spreadsheet`);
     } catch (error) {
       console.error('Error transferring athletes:', error);
       throw error;

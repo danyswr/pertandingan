@@ -1,0 +1,94 @@
+// spreadsheet pertama
+
+// Fungsi untuk menginisialisasi semua sheet
+function initializeSheets() {
+  const sheets = [
+    "admins",
+    "atlets",
+    "categories",
+    "subcategories",
+    "groups",
+    "group_members",
+    "matches",
+    "match_results",
+    "statuses"
+  ];
+
+  sheets.forEach(sheetName => {
+    if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName)) {
+      SpreadsheetApp.getActiveSpreadsheet().insertSheet(sheetName);
+    }
+  });
+}
+
+// Fungsi CRUD untuk semua tabel
+function getAllData(sheetName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  return sheet ? sheet.getDataRange().getValues() : [];
+}
+
+function getDataById(sheetName, idColumn, idValue) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return null;
+  const data = sheet.getDataRange().getValues();
+  return data.find(row => row[idColumn] == idValue) || null;
+}
+
+function createData(sheetName, data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return false;
+  sheet.appendRow(data);
+  return true;
+}
+
+function updateData(sheetName, idColumn, idValue, newData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return false;
+  const data = sheet.getDataRange().getValues();
+  const rowIndex = data.findIndex(row => row[idColumn] == idValue);
+  if (rowIndex > -1) {
+    sheet.getRange(rowIndex + 2, 1, 1, newData.length).setValues([newData]);
+    return true;
+  }
+  return false;
+}
+
+function deleteData(sheetName, idColumn, idValue) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return false;
+  const data = sheet.getDataRange().getValues();
+  const rowIndex = data.findIndex(row => row[idColumn] == idValue);
+  if (rowIndex > -1) {
+    sheet.deleteRow(rowIndex + 2);
+    return true;
+  }
+  return false;
+}
+
+// Fungsi untuk Web App
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index');
+}
+
+// Contoh fungsi untuk mengelola kehadiran atlet
+function updateAttendance(atletId, isPresent) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("atlets");
+  if (!sheet) return false;
+  const data = sheet.getDataRange().getValues();
+  const rowIndex = data.findIndex(row => row[0] == atletId); // Asumsi id_atlet di kolom A
+  if (rowIndex > -1) {
+    sheet.getRange(rowIndex + 2, 1, 1, data[0].length).setValues([[...data[rowIndex], isPresent]]);
+    return true;
+  }
+  return false;
+}
+
+// Ekspor data ke JSON untuk frontend
+function getAllSheetsData() {
+  const sheetsData = {};
+  const allSheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  allSheets.forEach(sheet => {
+    sheetsData[sheet.getName()] = sheet.getDataRange().getValues();
+  });
+  return JSON.stringify(sheetsData);
+}

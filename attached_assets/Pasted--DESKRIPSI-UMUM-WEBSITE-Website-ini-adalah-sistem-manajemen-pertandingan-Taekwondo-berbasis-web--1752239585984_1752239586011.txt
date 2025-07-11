@@ -1,0 +1,399 @@
+🧾 DESKRIPSI UMUM WEBSITE
+
+Website ini adalah sistem manajemen pertandingan Taekwondo berbasis web, yang ditujukan untuk panitia/admin dalam mengelola:
+
+
+
+Kehadiran atlet
+
+
+
+Pengelompokan kategori pertandingan
+
+
+
+Manajemen jalannya pertandingan (1 vs 1 system)
+
+
+
+Pemberian juara secara otomatis
+
+
+
+Pencegahan bentrok jadwal antar kategori
+
+
+
+Real-time sistem multi-admin
+
+
+
+🌐 STRUKTUR HALAMAN (PAGE STRUCTURE)
+
+Berikut ini adalah daftar halaman utama beserta fitur-fitur lengkap yang terdapat di dalamnya:
+
+
+
+1. 🧍‍♂️ Halaman Manajemen Atlet
+
+Tujuan:
+
+Mengelola data semua atlet yang ikut pertandingan.
+
+
+
+Fitur:
+
+🔍 Search & Filter Atlet:
+
+
+
+Berdasarkan nama, dojang, sabuk, kategori, tinggi/berat, status hadir, status bertanding
+
+
+
+✅ Kehadiran Atlet:
+
+
+
+Checkbox hadir / tidak hadir
+
+
+
+Atlet yang hadir akan otomatis:
+
+
+
+Masuk ke daftar pertandingan
+
+
+
+Card atlet jadi terang & diurutkan ke atas
+
+
+
+📄 Detail Atlet:
+
+
+
+Meliputi: nama, sabuk, berat, tinggi, asal dojang
+
+
+
+Daftar kejuaraan yang diikuti oleh atlet tersebut
+
+
+
+🔁 Status Bertanding:
+
+
+
+Menampilkan apakah atlet sedang bertanding atau tidak (digunakan untuk anti-bentrok)
+
+
+
+📤 Export Data Atlet:
+
+
+
+Ekspor data ke Excel / PDF
+
+
+
+2. 🧩 Halaman Kategori Pertandingan
+
+Tujuan:
+
+Membuat kategori dan subkategori (grup bertingkat).
+
+
+
+Struktur:
+
+less
+
+Copy
+
+Edit
+
+Kategori Utama → Sub-Kategori → Kelompok
+
+Contoh:
+
+Kyourugi → Pria 45-50kg → Kelompok A, B, C
+
+Fitur:
+
+➕ Tambah Kategori Baru
+
+
+
+Nama kategori (default mekanisme: 1 vs 1 / fight)
+
+
+
+➕ Tambah Sub-Kategori
+
+
+
+Misal filter berdasarkan gender, berat badan
+
+
+
+🔀 Auto Pembentukan Kelompok
+
+
+
+Berdasarkan jumlah atlet hadir
+
+
+
+👁️ Lihat Atlet dalam Setiap Kelompok
+
+
+
+Tampilkan urutan antrian bertanding
+
+
+
+3. 🥋 Halaman Manajemen Pertandingan
+
+Tujuan:
+
+Mengatur pertandingan dalam setiap kelompok.
+
+
+
+Mekanisme Bertanding (Fight System):
+
+1 kelompok = 2+ atlet → antrian
+
+
+
+2 atlet bertanding (sudut merah vs biru)
+
+
+
+Yang menang tetap, yang kalah digantikan oleh atlet berikutnya
+
+
+
+Admin klik:
+
+
+
+🔴 Menang Sudut Merah
+
+
+
+🔵 Menang Sudut Biru
+
+
+
+📈 Juara ditentukan otomatis:
+
+
+
+2 atlet: Juara 1 & 2
+
+
+
+3 atlet: Juara 1, 2, 3
+
+
+
+4+ atlet: Juara 1, 2, 3, 3 (double bronze logic)
+
+
+
+🔒 Status Bertanding
+
+
+
+Jika atlet sedang aktif bertanding di kategori A:
+
+
+
+Maka tidak bisa dipanggil di kategori B
+
+
+
+Setelah admin menentukan pemenang, status akan dibuka
+
+
+
+4. 🛑 Halaman Anti-Bentrok Sistem
+
+Tujuan:
+
+Mencegah atlet bertanding di dua kategori berbeda di waktu yang sama
+
+
+
+Fitur:
+
+Setiap atlet memiliki status:
+
+
+
+✅ Siap Bertanding
+
+
+
+⛔ Sedang Bertanding
+
+
+
+Ketika atlet sedang di kelompok A, maka:
+
+
+
+Admin lain tidak bisa memanggil atlet itu di kelompok B
+
+
+
+Setelah admin klik pemenang:
+
+
+
+Status atlet di-unlock untuk bisa dipanggil lagi
+
+
+
+5. 🖥️ Dashboard Admin (Beranda)
+
+Tujuan:
+
+Melihat statistik dan ringkasan data secara keseluruhan.
+
+
+
+Fitur:
+
+📊 Jumlah atlet, kategori, pertandingan aktif, juara sudah ditentukan
+
+
+
+🔄 List atlet yang sedang bertanding sekarang
+
+
+
+⏱️ Antrian pertandingan hari ini
+
+
+
+🔔 Notifikasi real-time (siapa menang, siapa bertanding)
+
+
+
+6. 👥 Halaman Multi-Admin Collaboration
+
+Tujuan:
+
+Memungkinkan lebih dari 1 admin bekerja bersamaan.
+
+
+
+Fitur:
+
+Semua data diupdate secara real-time
+
+
+
+Bisa menggunakan:
+
+
+
+Pusher (Laravel)
+
+
+
+Firebase Realtime DB
+
+
+
+WebSocket (Laravel WebSockets / Django Channels)
+
+
+
+Admin lain akan langsung melihat update pertandingan, kehadiran, antrian, juara tanpa perlu refresh
+
+
+
+7. 📄 Halaman Export Data & Laporan
+
+Tujuan:
+
+Membuat laporan kejuaraan yang bisa diunduh atau dicetak.
+
+
+
+Fitur:
+
+Export Excel:
+
+
+
+Daftar atlet
+
+
+
+Hasil pertandingan
+
+
+
+Juara tiap kelompok
+
+
+
+Export PDF:
+
+
+
+Sertifikat juara
+
+
+
+Rekap ringkasan kategori
+
+
+
+🛠️ STRUKTUR DATA (DATABASE DI dalam Sheet)
+
+Table Deskripsi
+
+admins Data admin (id, nama, username, password, role)
+
+atlets Data atlet lengkap
+
+categories Kategori utama (Kyourugi, Poomsae, dll)
+
+subcategories Subkategori berdasarkan berat/gender
+
+groups Kelompok pertandingan dalam subkategori
+
+group_members Relasi atlet dengan kelompok
+
+matches Pertandingan dalam kelompok
+
+match_results Hasil tiap pertandingan
+
+statuses Status atlet: hadir / tidak, sedang bertanding / bebas
+
+
+
+💡 CATATAN TAMBAHAN:
+
+Atlet bisa daftar lebih dari 1 kategori
+
+
+
+Prioritas penampilan ditentukan berdasarkan kehadiran dan status aktif
+
+
+
+Konsep menang = tetap, kalah = diganti
+
+
+
+Setiap keputusan admin bisa otomatis trigger ke sistem lain

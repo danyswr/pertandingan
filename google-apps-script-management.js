@@ -1,26 +1,89 @@
-// Google Apps Script untuk Spreadsheet Manajemen Turnamen
-// URL: https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec
+// Google Apps Script yang sudah diperbaiki untuk Spreadsheet Manajemen
+// Copy kode ini ke Google Apps Script dan deploy sebagai Web App
 
 function doPost(e) {
   try {
     const params = e.parameter;
-    const action = params.action;
+    console.log('Received POST params:', JSON.stringify(params));
     
-    console.log('Received POST request:', params);
+    // Buat atau ambil sheet atlets
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = spreadsheet.getSheetByName('atlets');
     
-    if (action === 'createData') {
-      return handleCreateData(params);
-    } else if (action === 'createBatch') {
-      return handleCreateBatch(params);
-    } else {
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet('atlets');
+      // Tambahkan header
+      sheet.getRange(1, 1, 1, 13).setValues([[
+        'ID Atlet', 'Nama Lengkap', 'Gender', 'Tanggal Lahir', 'Dojang', 
+        'Sabuk', 'Berat Badan', 'Tinggi Badan', 'Kategori', 'Kelas', 
+        'Hadir', 'Status', 'Waktu Input'
+      ]]);
+    }
+    
+    if (params.action === 'addData' && params.rowData) {
+      // Parse data dari parameter
+      const rowData = JSON.parse(params.rowData);
+      rowData.push(new Date().toLocaleString('id-ID')); // Tambahkan timestamp
+      
+      // Tambahkan data ke sheet
+      sheet.appendRow(rowData);
+      
+      console.log('Data successfully added:', rowData);
+      
       return ContentService
-        .createTextOutput(JSON.stringify({error: 'Unknown action: ' + action}))
+        .createTextOutput(JSON.stringify({success: true, message: 'Data berhasil ditambahkan', data: rowData}))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    
+    // Handle batch data
+    if (params.action === 'createBatch' && params.data) {
+      const batchData = JSON.parse(params.data);
+      console.log('Processing batch data:', batchData.length, 'items');
+      
+      let successCount = 0;
+      for (const item of batchData) {
+        try {
+          const rowData = [
+            item.id_atlet,
+            item.nama_lengkap,
+            item.gender,
+            item.tgl_lahir,
+            item.dojang,
+            item.sabuk,
+            item.berat_badan,
+            item.tinggi_badan,
+            item.kategori,
+            item.kelas,
+            item.isPresent,
+            item.status,
+            new Date().toLocaleString('id-ID')
+          ];
+          
+          sheet.appendRow(rowData);
+          successCount++;
+          console.log('Added athlete:', item.nama_lengkap);
+        } catch (error) {
+          console.error('Error adding athlete:', item.nama_lengkap, error);
+        }
+      }
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: true, 
+          message: `Batch transfer berhasil: ${successCount}/${batchData.length} atlet`,
+          count: successCount
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: false, message: 'Action tidak dikenal atau parameter tidak lengkap'}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
   } catch (error) {
     console.error('Error in doPost:', error);
     return ContentService
-      .createTextOutput(JSON.stringify({error: error.toString()}))
+      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -28,193 +91,58 @@ function doPost(e) {
 function doGet(e) {
   try {
     const params = e.parameter;
-    const action = params.action;
+    console.log('Received GET params:', JSON.stringify(params));
     
-    if (action === 'getAllData') {
-      return handleGetAllData(params);
-    } else {
+    if (params.action === 'test') {
       return ContentService
-        .createTextOutput(JSON.stringify({error: 'Unknown action: ' + action}))
+        .createTextOutput(JSON.stringify({success: true, message: 'Google Apps Script bekerja dengan baik'}))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    
+    // Get all data
+    if (params.action === 'getAllData') {
+      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      const sheet = spreadsheet.getSheetByName('atlets');
+      
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Sheet atlets tidak ditemukan'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const data = sheet.getDataRange().getValues();
+      return ContentService
+        .createTextOutput(JSON.stringify({success: true, data: data}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true, message: 'Google Apps Script aktif'}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
   } catch (error) {
     console.error('Error in doGet:', error);
     return ContentService
-      .createTextOutput(JSON.stringify({error: error.toString()}))
+      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-function handleCreateData(params) {
-  try {
-    const sheetName = params.sheetName || 'atlets';
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // Buat sheet jika belum ada
-    let sheet = spreadsheet.getSheetByName(sheetName);
-    if (!sheet) {
-      sheet = spreadsheet.insertSheet(sheetName);
-      // Tambahkan header
-      const headers = [
-        'id_atlet', 'nama_lengkap', 'gender', 'tgl_lahir', 'dojang', 
-        'sabuk', 'berat_badan', 'tinggi_badan', 'kategori', 'kelas', 
-        'isPresent', 'status', 'timestamp'
-      ];
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    }
-    
-    // Parse data yang dikirim
-    const data = JSON.parse(params.data);
-    
-    // Tambahkan timestamp
-    data.push(new Date().toISOString());
-    
-    // Tambahkan data ke sheet
-    sheet.appendRow(data);
-    
-    console.log('Data added successfully:', data);
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true, 
-        message: 'Data added successfully',
-        data: data
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    console.error('Error in handleCreateData:', error);
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        error: error.toString()
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function handleCreateBatch(params) {
-  try {
-    const sheetName = params.sheetName || 'atlets';
-    const data = JSON.parse(params.data);
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // Buat sheet jika belum ada
-    let sheet = spreadsheet.getSheetByName(sheetName);
-    if (!sheet) {
-      sheet = spreadsheet.insertSheet(sheetName);
-      // Tambahkan header
-      const headers = [
-        'id_atlet', 'nama_lengkap', 'gender', 'tgl_lahir', 'dojang', 
-        'sabuk', 'berat_badan', 'tinggi_badan', 'kategori', 'kelas', 
-        'isPresent', 'status', 'timestamp'
-      ];
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    }
-    
-    // Konversi data ke format array
-    const rows = data.map(item => [
-      item.id_atlet,
-      item.nama_lengkap,
-      item.gender,
-      item.tgl_lahir,
-      item.dojang,
-      item.sabuk,
-      item.berat_badan,
-      item.tinggi_badan,
-      item.kategori,
-      item.kelas,
-      item.isPresent,
-      item.status,
-      new Date().toISOString()
-    ]);
-    
-    // Tambahkan semua data sekaligus
-    if (rows.length > 0) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    }
-    
-    console.log('Batch data added successfully:', rows.length, 'rows');
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true,
-        message: 'Batch data added successfully',
-        count: rows.length
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    console.error('Error in handleCreateBatch:', error);
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        error: error.toString()
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function handleGetAllData(params) {
-  try {
-    const sheetName = params.sheetName || 'atlets';
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = spreadsheet.getSheetByName(sheetName);
-    
-    if (!sheet) {
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          success: false,
-          error: 'Sheet not found: ' + sheetName
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    const data = sheet.getDataRange().getValues();
-    
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true,
-        data: data
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    console.error('Error in handleGetAllData:', error);
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        error: error.toString()
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-// Fungsi helper untuk inisialisasi sheet jika diperlukan
+// Fungsi untuk menginisialisasi semua sheet
 function initializeSheets() {
-  const sheets = [
-    "atlets",
-    "categories", 
-    "groups",
-    "matches",
-    "results"
-  ];
-
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   
-  sheets.forEach(sheetName => {
-    if (!spreadsheet.getSheetByName(sheetName)) {
-      const sheet = spreadsheet.insertSheet(sheetName);
-      
-      // Tambahkan header khusus untuk setiap sheet
-      if (sheetName === 'atlets') {
-        const headers = [
-          'id_atlet', 'nama_lengkap', 'gender', 'tgl_lahir', 'dojang', 
-          'sabuk', 'berat_badan', 'tinggi_badan', 'kategori', 'kelas', 
-          'isPresent', 'status', 'timestamp'
-        ];
-        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      }
-    }
-  });
+  // Sheet atlets
+  let atletsSheet = spreadsheet.getSheetByName('atlets');
+  if (!atletsSheet) {
+    atletsSheet = spreadsheet.insertSheet('atlets');
+    atletsSheet.getRange(1, 1, 1, 13).setValues([[
+      'ID Atlet', 'Nama Lengkap', 'Gender', 'Tanggal Lahir', 'Dojang', 
+      'Sabuk', 'Berat Badan', 'Tinggi Badan', 'Kategori', 'Kelas', 
+      'Hadir', 'Status', 'Waktu Input'
+    ]]);
+  }
+  
+  console.log('Sheets initialized successfully');
+  return 'Sheets initialized successfully';
 }

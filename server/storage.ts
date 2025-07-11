@@ -480,7 +480,9 @@ export class MemStorage implements IStorage {
 
       // Test koneksi ke Google Apps Script terlebih dahulu
       let scriptWorking = false;
+      
       try {
+        // Test dengan URL utama
         const testResponse = await fetch(`${managementUrl}?action=test`, {
           method: 'GET',
           headers: { 'Accept': 'application/json' }
@@ -489,8 +491,12 @@ export class MemStorage implements IStorage {
         const responseText = await testResponse.text();
         console.log('Google Apps Script test response:', responseText);
         
-        // Jika response mengandung JSON atau success message, script bekerja
-        scriptWorking = responseText.includes('success') || responseText.includes('{') || testResponse.ok;
+        // Cek apakah response berisi success atau JSON
+        scriptWorking = responseText.includes('success') || responseText.includes('{');
+        
+        if (!scriptWorking && testResponse.status === 302) {
+          console.log('Google Apps Script mengembalikan redirect - kemungkinan belum dikonfigurasi dengan benar');
+        }
       } catch (error) {
         console.log('Google Apps Script test failed:', error);
         scriptWorking = false;
@@ -501,27 +507,33 @@ export class MemStorage implements IStorage {
       if (scriptWorking) {
         console.log('Google Apps Script is working, proceeding with transfer...');
         
-        // Coba kirim sebagai batch terlebih dahulu
+        // Coba kirim batch terlebih dahulu
         try {
-          const batchResponse = await fetch(managementUrl, {
+          const formData = new URLSearchParams();
+          formData.append('action', 'createBatch');
+          formData.append('sheetName', 'atlets');
+          formData.append('data', JSON.stringify(transferData));
+
+          console.log('Sending batch data to Google Apps Script...');
+          console.log('Batch data:', transferData.length, 'athletes');
+
+          const response = await fetch(managementUrl, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: JSON.stringify({
-              action: 'createBatch',
-              sheetName: 'atlets',
-              data: transferData
-            })
+            body: formData,
+            redirect: 'follow'
           });
 
-          const batchResult = await batchResponse.text();
-          console.log('Batch transfer response:', batchResult);
+          const result = await response.text();
+          console.log('Batch transfer result:', result);
 
-          if (batchResponse.ok && (batchResult.includes('success') || batchResult.includes('Athletes'))) {
+          if (response.ok && result.includes('success')) {
             successCount = transferData.length;
             console.log('Batch transfer successful');
           } else {
+            console.log('Batch transfer failed, result:', result);
             throw new Error('Batch transfer failed, trying individual transfers');
           }
         } catch (batchError) {
@@ -552,18 +564,21 @@ export class MemStorage implements IStorage {
               
               formData.append('rowData', JSON.stringify(rowData));
 
+              console.log(`Sending data for ${athleteData.nama_lengkap} to Google Apps Script`);
+
               const response = await fetch(managementUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: formData
+                body: formData,
+                redirect: 'follow'
               });
 
               const result = await response.text();
               console.log(`Transfer result for ${athleteData.nama_lengkap}:`, result);
 
-              if (response.ok) {
+              if (response.ok && result.includes('success')) {
                 successCount++;
                 console.log(`Successfully transferred athlete: ${athleteData.nama_lengkap}`);
               } else {

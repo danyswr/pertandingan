@@ -1,5 +1,8 @@
 # Instruksi Konfigurasi Google Apps Script untuk Transfer Data
 
+## Status Masalah
+✅ **Teridentifikasi**: Google Apps Script mengembalikan "Action tidak dikenal" yang berarti kode belum dikonfigurasi dengan benar untuk menerima data dari sistem.
+
 ## Masalah yang Terjadi
 Data berhasil dikirim dari website tapi tidak tersimpan di Google Spreadsheet karena Google Apps Script belum dikonfigurasi dengan benar.
 
@@ -13,7 +16,9 @@ Data berhasil dikirim dari website tapi tidak tersimpan di Google Spreadsheet ka
 - Di spreadsheet, klik menu "Extensions" > "Apps Script"
 - Atau buka https://script.google.com/
 
-### 3. Hapus Kode yang Ada dan Ganti dengan Kode Ini
+### 3. PENTING: Hapus Kode yang Ada dan Ganti dengan Kode Lengkap Ini
+
+**CATATAN:** Kode ini sudah dibuat khusus untuk menangani data dari sistem. Pastikan menggunakan kode yang LENGKAP dari file `google-apps-script-management.js`
 
 ```javascript
 function doPost(e) {

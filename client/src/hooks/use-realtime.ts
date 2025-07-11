@@ -95,8 +95,18 @@ export function useRealtime() {
     };
   }, [queryClient, toast, wsManager]);
 
+  // Clear cache untuk refresh data
+  const clearCache = async () => {
+    try {
+      await fetch('/api/cache/clear', { method: 'POST' });
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+    }
+  };
+
   return {
     isConnected,
-    sendMessage: (message: WebSocketMessage) => wsManager.send(message)
+    sendMessage: (message: WebSocketMessage) => wsManager.send(message),
+    clearCache
   };
 }

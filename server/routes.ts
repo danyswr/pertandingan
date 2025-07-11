@@ -10,6 +10,10 @@ const GOOGLE_SHEETS_CONFIG = {
   MANAGEMENT_API: process.env.MANAGEMENT_API || 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec'
 };
 
+// Cache untuk mempercepat pengambilan data
+const dataCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_DURATION = 30000; // 30 detik
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
@@ -44,26 +48,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
 
-  // Helper function to fetch from Google Sheets
+  // Helper function to fetch from Google Sheets dengan caching
   async function fetchFromGoogleSheets(url: string, params: Record<string, string> = {}) {
     try {
+      const cacheKey = `${url}?${new URLSearchParams(params).toString()}`;
+      
+      // Check cache first
+      if (dataCache.has(cacheKey)) {
+        const cached = dataCache.get(cacheKey)!;
+        if (Date.now() - cached.timestamp < CACHE_DURATION) {
+          return cached.data;
+        } else {
+          dataCache.delete(cacheKey);
+        }
+      }
+      
       const urlWithParams = new URL(url);
       Object.entries(params).forEach(([key, value]) => {
         urlWithParams.searchParams.append(key, value);
       });
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 detik timeout
+      
       const response = await fetch(urlWithParams.toString(), {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-        }
+          'Cache-Control': 'no-cache',
+        },
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      
+      // Cache hasil untuk permintaan selanjutnya
+      dataCache.set(cacheKey, { data, timestamp: Date.now() });
+      
+      return data;
     } catch (error) {
       console.error('Google Sheets API error:', error);
       throw new Error('Failed to fetch data from Google Sheets');
@@ -395,11 +423,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: new URLSearchParams({
-          action: action || 'updateData',
-          data: JSON.stringify(data)
+        body: JSON.stringify({
+          action,
+          data
         })
       });
       
@@ -408,11 +436,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const result = await response.json();
+      broadcast({ type: 'sheets_sync_complete', data: result });
+      
       res.json(result);
     } catch (error) {
-      console.error('Google Sheets sync error:', error);
+      console.error('Error syncing with Google Sheets:', error);
       res.status(500).json({ error: 'Failed to sync with Google Sheets' });
     }
+  });
+
+  // Real-time data endpoint untuk polling
+  app.get('/api/realtime/athletes', async (req, res) => {
+    try {
+      const athletes = await storage.getAllAthletes();
+      res.json({
+        timestamp: Date.now(),
+        athletes
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch real-time athletes data' });
+    }
+  });
+
+  // Endpoint untuk force refresh cache
+  app.post('/api/cache/clear', async (req, res) => {
+    try {
+      dataCache.clear();
+      res.json({ message: 'Cache cleared successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to clear cache' });
+    }
+  });
+
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      connections: clients.size,
+      cacheSize: dataCache.size
+    });
   });
 
   return httpServer;

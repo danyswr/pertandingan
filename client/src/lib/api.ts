@@ -70,15 +70,31 @@ export const api = {
   exportResults: (format: 'excel' | 'pdf') =>
     fetch(`/api/export/results?format=${format}`).then(res => res.json()),
 
-  // Google Sheets integration
+  // Google Sheets integration dengan optimasi
   getCompetitionsFromGoogleSheets: (): Promise<GoogleSheetsCompetition[]> =>
-    fetch('/api/google-sheets/competitions').then(res => res.json()),
+    fetch('/api/google-sheets/competitions', {
+      headers: { 'Cache-Control': 'no-cache' }
+    }).then(res => res.json()),
 
   getAthletesFromCompetition: (competitionId: string): Promise<GoogleSheetsAthlete[]> =>
-    fetch(`/api/google-sheets/athletes/${competitionId}`).then(res => res.json()),
+    fetch(`/api/google-sheets/athletes/${competitionId}`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    }).then(res => res.json()),
 
-  transferAthletesToManagement: (athletes: GoogleSheetsAthlete[]): Promise<{ message: string; count: number }> =>
+  transferAthletesToManagement: (athletes: GoogleSheetsAthlete[]): Promise<{ count: number }> =>
     apiRequest('POST', '/api/google-sheets/transfer-athletes', { athletes }).then(res => res.json()),
+
+  // Real-time data API
+  getRealTimeAthletes: (): Promise<{ timestamp: number; athletes: any[] }> =>
+    fetch('/api/realtime/athletes').then(res => res.json()),
+
+  // Cache management
+  clearDataCache: (): Promise<{ message: string }> =>
+    apiRequest('POST', '/api/cache/clear', {}).then(res => res.json()),
+
+  // Health check
+  getHealthStatus: (): Promise<{ status: string; connections: number; cacheSize: number }> =>
+    fetch('/api/health').then(res => res.json()),
 
   // Google Sheets sync (legacy)
   syncToGoogleSheets: (data: any, action: string) =>

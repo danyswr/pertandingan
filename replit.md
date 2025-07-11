@@ -90,4 +90,14 @@ The system uses a relational database design with the following core entities:
 - **WebSocket Scaling**: Single-instance with potential for Redis adapter
 - **Google Sheets**: External API integration with configurable endpoints
 
+## Recent Changes
+
+### 2025-01-11 - Performance Optimization & Real-time Enhancements
+- **Caching System**: Implemented server-side caching for Google Sheets data with 30-second TTL
+- **Real-time Updates**: Enhanced WebSocket functionality with automatic reconnection
+- **API Optimization**: Added cache headers and request timeouts for faster data retrieval
+- **UI Improvements**: Added refresh buttons and connection status indicators
+- **Auto-refresh**: Implemented automatic data refresh every 30 seconds for athlete data
+- **Google Sheets Integration**: Optimized integration with new management spreadsheet URL
+
 The system is designed for tournament organizers who need real-time coordination capabilities, automated bracket management, and seamless integration with existing Google Sheets workflows for athlete registration.

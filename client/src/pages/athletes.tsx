@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import { useRealtime } from "@/hooks/use-realtime";
 import { api } from "@/lib/api";
-import { Search, Filter, Users, Calendar, Download, RefreshCw } from "lucide-react";
+import { Search, Filter, Users, Calendar, Download, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import type { GoogleSheetsCompetition, GoogleSheetsAthlete, Athlete } from "@shared/schema";
 
 // Interface untuk filter
@@ -56,6 +56,9 @@ export default function Athletes() {
     kategori: 'all',
     kelas: 'all'
   });
+  
+  // State untuk toggle filter visibility
+  const [showFilters, setShowFilters] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -264,13 +267,22 @@ export default function Athletes() {
               <CardTitle className="flex items-center gap-2">
                 <Filter className="w-5 h-5" />
                 Filter & Pencarian
-                <Button variant="ghost" size="sm" onClick={resetFilters} className="ml-auto">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="ml-auto"
+                >
+                  {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={resetFilters}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Reset
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            {showFilters && (
+              <CardContent className="space-y-4">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -426,6 +438,7 @@ export default function Athletes() {
                 </div>
               </div>
             </CardContent>
+            )}
           </Card>
 
           {/* Athletes Table */}

@@ -24,6 +24,9 @@ export const api = {
   getAthletes: (): Promise<Athlete[]> =>
     fetch('/api/athletes').then(res => res.json()),
   
+  getAllAthletes: (): Promise<Athlete[]> =>
+    fetch('/api/athletes').then(res => res.json()),
+  
   syncAthletes: (competitionId?: string): Promise<{ success: boolean; count: number; athletes: Athlete[] }> =>
     fetch(`/api/athletes/sync${competitionId ? `?competitionId=${competitionId}` : ''}`).then(res => res.json()),
   
@@ -81,8 +84,8 @@ export const api = {
       headers: { 'Cache-Control': 'no-cache' }
     }).then(res => res.json()),
 
-  transferAthletesToManagement: (athletes: GoogleSheetsAthlete[]): Promise<{ count: number }> =>
-    apiRequest('POST', '/api/google-sheets/transfer-athletes', { athletes }).then(res => res.json()),
+  transferAthletesToManagement: (data: { athletes: GoogleSheetsAthlete[] }): Promise<{ count: number }> =>
+    apiRequest('POST', '/api/google-sheets/transfer-athletes', data).then(res => res.json()),
 
   // Real-time data API
   getRealTimeAthletes: (): Promise<{ timestamp: number; athletes: any[] }> =>

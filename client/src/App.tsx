@@ -11,6 +11,7 @@ import Categories from "@/pages/categories";
 import Matches from "@/pages/matches";
 import AntiClash from "@/pages/anti-clash";
 import Reports from "@/pages/reports";
+import TournamentBracket from "@/pages/tournament-bracket";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -25,6 +26,7 @@ function Router() {
           <Route path="/matches" component={Matches} />
           <Route path="/anti-clash" component={AntiClash} />
           <Route path="/reports" component={Reports} />
+          <Route path="/tournament-bracket" component={TournamentBracket} />
           <Route component={NotFound} />
         </Switch>
       </div>

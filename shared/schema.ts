@@ -19,7 +19,46 @@ export const athletes = pgTable("athletes", {
   competitionId: text("competition_id")
 });
 
-// Categories table
+// Main Categories (Kategori_utama) - Kyorugi, Poomsae, etc.
+export const mainCategories = pgTable("main_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // e.g., "Kyorugi", "Poomsae"
+  description: text("description"),
+  isActive: boolean("is_active").default(true)
+});
+
+// Sub Categories (SubKategori) - Divisions within main categories
+export const subCategories = pgTable("sub_categories", {
+  id: serial("id").primaryKey(),
+  mainCategoryId: integer("main_category_id").references(() => mainCategories.id),
+  name: text("name").notNull(), // e.g., "Putra Junior", "Putri Senior"
+  order: integer("order").notNull(), // For sorting
+  isActive: boolean("is_active").default(true)
+});
+
+// Athlete Groups (Kelompok_Atlet) - Groups of athletes within sub categories
+export const athleteGroups = pgTable("athlete_groups", {
+  id: serial("id").primaryKey(),
+  subCategoryId: integer("sub_category_id").references(() => subCategories.id),
+  name: text("name").notNull(), // e.g., "Grup A", "Grup B"
+  minAthletes: integer("min_athletes").default(2),
+  maxAthletes: integer("max_athletes").default(8),
+  currentCount: integer("current_count").default(0),
+  status: varchar("status", { length: 20 }).default("pending") // pending, active, completed
+});
+
+// Group Athletes (daftar_kelompok) - Athletes assigned to groups
+export const groupAthletes = pgTable("group_athletes", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id").references(() => athleteGroups.id),
+  athleteId: integer("athlete_id").references(() => athletes.id),
+  position: varchar("position", { length: 10 }), // "red", "blue", "queue"
+  queueOrder: integer("queue_order"), // For queuing system when >2 athletes
+  isEliminated: boolean("is_eliminated").default(false),
+  eliminatedAt: timestamp("eliminated_at")
+});
+
+// Legacy Categories table (kept for backward compatibility)
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -92,6 +131,22 @@ export const insertAthleteSchema = createInsertSchema(athletes).omit({
   id: true
 });
 
+export const insertMainCategorySchema = createInsertSchema(mainCategories).omit({
+  id: true
+});
+
+export const insertSubCategorySchema = createInsertSchema(subCategories).omit({
+  id: true
+});
+
+export const insertAthleteGroupSchema = createInsertSchema(athleteGroups).omit({
+  id: true
+});
+
+export const insertGroupAthleteSchema = createInsertSchema(groupAthletes).omit({
+  id: true
+});
+
 export const insertCategorySchema = createInsertSchema(categories).omit({
   id: true
 });
@@ -111,6 +166,18 @@ export const insertTournamentResultSchema = createInsertSchema(tournamentResults
 // Types
 export type Athlete = typeof athletes.$inferSelect;
 export type InsertAthlete = z.infer<typeof insertAthleteSchema>;
+
+export type MainCategory = typeof mainCategories.$inferSelect;
+export type InsertMainCategory = z.infer<typeof insertMainCategorySchema>;
+
+export type SubCategory = typeof subCategories.$inferSelect;
+export type InsertSubCategory = z.infer<typeof insertSubCategorySchema>;
+
+export type AthleteGroup = typeof athleteGroups.$inferSelect;
+export type InsertAthleteGroup = z.infer<typeof insertAthleteGroupSchema>;
+
+export type GroupAthlete = typeof groupAthletes.$inferSelect;
+export type InsertGroupAthlete = z.infer<typeof insertGroupAthleteSchema>;
 
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;

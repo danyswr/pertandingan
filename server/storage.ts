@@ -1,5 +1,9 @@
 import { 
   athletes, 
+  mainCategories,
+  subCategories,
+  athleteGroups,
+  groupAthletes,
   categories, 
   groups, 
   groupMembers, 
@@ -8,6 +12,14 @@ import {
   athleteStatus,
   type Athlete, 
   type InsertAthlete,
+  type MainCategory,
+  type InsertMainCategory,
+  type SubCategory,
+  type InsertSubCategory,
+  type AthleteGroup,
+  type InsertAthleteGroup,
+  type GroupAthlete,
+  type InsertGroupAthlete,
   type Category,
   type InsertCategory,
   type Group,
@@ -19,7 +31,8 @@ import {
   type AthleteStatus,
   type DashboardStats,
   type ActiveMatch,
-  type GoogleSheetsAthlete
+  type GoogleSheetsAthlete,
+  type GoogleSheetsCompetition
 } from "@shared/schema";
 
 export interface IStorage {
@@ -31,15 +44,43 @@ export interface IStorage {
   updateAthleteAttendance(id: number, isPresent: boolean): Promise<Athlete>;
   updateAthleteStatus(id: number, status: string, ring?: string): Promise<Athlete>;
   
-  // Categories
+  // Main Categories (Kategori_utama)
+  getAllMainCategories(): Promise<MainCategory[]>;
+  getMainCategoryById(id: number): Promise<MainCategory | undefined>;
+  createMainCategory(category: InsertMainCategory): Promise<MainCategory>;
+  updateMainCategory(id: number, category: Partial<InsertMainCategory>): Promise<MainCategory>;
+  deleteMainCategory(id: number): Promise<void>;
+  
+  // Sub Categories (SubKategori)
+  getSubCategoriesByMainCategory(mainCategoryId: number): Promise<SubCategory[]>;
+  getSubCategoryById(id: number): Promise<SubCategory | undefined>;
+  createSubCategory(subCategory: InsertSubCategory): Promise<SubCategory>;
+  updateSubCategory(id: number, subCategory: Partial<InsertSubCategory>): Promise<SubCategory>;
+  deleteSubCategory(id: number): Promise<void>;
+  
+  // Athlete Groups (Kelompok_Atlet)
+  getAthleteGroupsBySubCategory(subCategoryId: number): Promise<AthleteGroup[]>;
+  getAthleteGroupById(id: number): Promise<AthleteGroup | undefined>;
+  createAthleteGroup(athleteGroup: InsertAthleteGroup): Promise<AthleteGroup>;
+  updateAthleteGroup(id: number, athleteGroup: Partial<InsertAthleteGroup>): Promise<AthleteGroup>;
+  deleteAthleteGroup(id: number): Promise<void>;
+  
+  // Group Athletes (daftar_kelompok)
+  getGroupAthletesByGroup(groupId: number): Promise<GroupAthlete[]>;
+  addAthleteToGroup(groupAthlete: InsertGroupAthlete): Promise<GroupAthlete>;
+  removeAthleteFromGroup(groupId: number, athleteId: number): Promise<void>;
+  updateAthletePosition(groupId: number, athleteId: number, position: string, queueOrder?: number): Promise<GroupAthlete>;
+  eliminateAthlete(groupId: number, athleteId: number): Promise<GroupAthlete>;
+  
+  // Legacy Categories
   getAllCategories(): Promise<Category[]>;
   getCategoryById(id: number): Promise<Category | undefined>;
   createCategory(category: InsertCategory): Promise<Category>;
   
-  // Groups
+  // Legacy Groups
   getGroupsByCategory(categoryId: number): Promise<Group[]>;
   createGroup(group: InsertGroup): Promise<Group>;
-  addAthleteToGroup(groupId: number, athleteId: number): Promise<void>;
+  addAthleteToLegacyGroup(groupId: number, athleteId: number): Promise<void>;
   
   // Matches
   getAllMatches(): Promise<Match[]>;
@@ -64,10 +105,20 @@ export interface IStorage {
   getCompetitionsFromGoogleSheets(): Promise<GoogleSheetsCompetition[]>;
   getAthletesFromCompetition(competitionId: string): Promise<GoogleSheetsAthlete[]>;
   transferAthletesToManagement(athletes: GoogleSheetsAthlete[]): Promise<void>;
+  
+  // Google Sheets Tournament Bracket Integration
+  syncMainCategoriesToGoogleSheets(): Promise<void>;
+  syncSubCategoriesToGoogleSheets(): Promise<void>;
+  syncAthleteGroupsToGoogleSheets(): Promise<void>;
+  syncGroupAthletesToGoogleSheets(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   private athletes: Map<number, Athlete> = new Map();
+  private mainCategories: Map<number, MainCategory> = new Map();
+  private subCategories: Map<number, SubCategory> = new Map();
+  private athleteGroups: Map<number, AthleteGroup> = new Map();
+  private groupAthletes: Map<number, GroupAthlete> = new Map();
   private categories: Map<number, Category> = new Map();
   private groups: Map<number, Group> = new Map();
   private groupMembers: Map<number, any> = new Map();
@@ -76,6 +127,10 @@ export class MemStorage implements IStorage {
   private athleteStatusMap: Map<number, AthleteStatus> = new Map();
   
   private currentAthleteId = 1;
+  private currentMainCategoryId = 1;
+  private currentSubCategoryId = 1;
+  private currentAthleteGroupId = 1;
+  private currentGroupAthleteId = 1;
   private currentCategoryId = 1;
   private currentGroupId = 1;
   private currentMatchId = 1;
@@ -248,6 +303,174 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  // Main Categories (Kategori_utama) methods
+  async getAllMainCategories(): Promise<MainCategory[]> {
+    return Array.from(this.mainCategories.values());
+  }
+
+  async getMainCategoryById(id: number): Promise<MainCategory | undefined> {
+    return this.mainCategories.get(id);
+  }
+
+  async createMainCategory(category: InsertMainCategory): Promise<MainCategory> {
+    const id = this.currentMainCategoryId++;
+    const newCategory: MainCategory = { 
+      ...category, 
+      id,
+      description: category.description || null,
+      isActive: category.isActive || null
+    };
+    this.mainCategories.set(id, newCategory);
+    return newCategory;
+  }
+
+  async updateMainCategory(id: number, category: Partial<InsertMainCategory>): Promise<MainCategory> {
+    const existing = this.mainCategories.get(id);
+    if (!existing) throw new Error('Main category not found');
+    
+    const updated = { ...existing, ...category };
+    this.mainCategories.set(id, updated);
+    return updated;
+  }
+
+  async deleteMainCategory(id: number): Promise<void> {
+    this.mainCategories.delete(id);
+  }
+
+  // Sub Categories (SubKategori) methods
+  async getSubCategoriesByMainCategory(mainCategoryId: number): Promise<SubCategory[]> {
+    return Array.from(this.subCategories.values()).filter(sc => sc.mainCategoryId === mainCategoryId);
+  }
+
+  async getSubCategoryById(id: number): Promise<SubCategory | undefined> {
+    return this.subCategories.get(id);
+  }
+
+  async createSubCategory(subCategory: InsertSubCategory): Promise<SubCategory> {
+    const id = this.currentSubCategoryId++;
+    const newSubCategory: SubCategory = { 
+      ...subCategory, 
+      id,
+      mainCategoryId: subCategory.mainCategoryId || null,
+      isActive: subCategory.isActive || null
+    };
+    this.subCategories.set(id, newSubCategory);
+    return newSubCategory;
+  }
+
+  async updateSubCategory(id: number, subCategory: Partial<InsertSubCategory>): Promise<SubCategory> {
+    const existing = this.subCategories.get(id);
+    if (!existing) throw new Error('Sub category not found');
+    
+    const updated = { ...existing, ...subCategory };
+    this.subCategories.set(id, updated);
+    return updated;
+  }
+
+  async deleteSubCategory(id: number): Promise<void> {
+    this.subCategories.delete(id);
+  }
+
+  // Athlete Groups (Kelompok_Atlet) methods
+  async getAthleteGroupsBySubCategory(subCategoryId: number): Promise<AthleteGroup[]> {
+    return Array.from(this.athleteGroups.values()).filter(ag => ag.subCategoryId === subCategoryId);
+  }
+
+  async getAthleteGroupById(id: number): Promise<AthleteGroup | undefined> {
+    return this.athleteGroups.get(id);
+  }
+
+  async createAthleteGroup(athleteGroup: InsertAthleteGroup): Promise<AthleteGroup> {
+    const id = this.currentAthleteGroupId++;
+    const newGroup: AthleteGroup = { 
+      ...athleteGroup, 
+      id,
+      subCategoryId: athleteGroup.subCategoryId || null,
+      minAthletes: athleteGroup.minAthletes || null,
+      maxAthletes: athleteGroup.maxAthletes || null,
+      currentCount: athleteGroup.currentCount || null,
+      status: athleteGroup.status || null
+    };
+    this.athleteGroups.set(id, newGroup);
+    return newGroup;
+  }
+
+  async updateAthleteGroup(id: number, athleteGroup: Partial<InsertAthleteGroup>): Promise<AthleteGroup> {
+    const existing = this.athleteGroups.get(id);
+    if (!existing) throw new Error('Athlete group not found');
+    
+    const updated = { ...existing, ...athleteGroup };
+    this.athleteGroups.set(id, updated);
+    return updated;
+  }
+
+  async deleteAthleteGroup(id: number): Promise<void> {
+    this.athleteGroups.delete(id);
+  }
+
+  // Group Athletes (daftar_kelompok) methods
+  async getGroupAthletesByGroup(groupId: number): Promise<GroupAthlete[]> {
+    return Array.from(this.groupAthletes.values()).filter(ga => ga.groupId === groupId);
+  }
+
+  async addAthleteToGroup(groupAthlete: InsertGroupAthlete): Promise<GroupAthlete> {
+    const id = this.currentGroupAthleteId++;
+    const newGroupAthlete: GroupAthlete = { 
+      ...groupAthlete, 
+      id,
+      groupId: groupAthlete.groupId || null,
+      athleteId: groupAthlete.athleteId || null,
+      position: groupAthlete.position || null,
+      queueOrder: groupAthlete.queueOrder || null,
+      isEliminated: groupAthlete.isEliminated || null,
+      eliminatedAt: groupAthlete.eliminatedAt || null
+    };
+    this.groupAthletes.set(id, newGroupAthlete);
+    
+    // Update group's current count
+    const group = this.athleteGroups.get(groupAthlete.groupId);
+    if (group) {
+      group.currentCount = (group.currentCount || 0) + 1;
+    }
+    
+    return newGroupAthlete;
+  }
+
+  async removeAthleteFromGroup(groupId: number, athleteId: number): Promise<void> {
+    const groupAthlete = Array.from(this.groupAthletes.values()).find(ga => ga.groupId === groupId && ga.athleteId === athleteId);
+    if (groupAthlete) {
+      this.groupAthletes.delete(groupAthlete.id);
+      
+      // Update group's current count
+      const group = this.athleteGroups.get(groupId);
+      if (group) {
+        group.currentCount = Math.max(0, (group.currentCount || 0) - 1);
+      }
+    }
+  }
+
+  async updateAthletePosition(groupId: number, athleteId: number, position: string, queueOrder?: number): Promise<GroupAthlete> {
+    const groupAthlete = Array.from(this.groupAthletes.values()).find(ga => ga.groupId === groupId && ga.athleteId === athleteId);
+    if (!groupAthlete) throw new Error('Group athlete not found');
+    
+    groupAthlete.position = position;
+    if (queueOrder !== undefined) {
+      groupAthlete.queueOrder = queueOrder;
+    }
+    
+    return groupAthlete;
+  }
+
+  async eliminateAthlete(groupId: number, athleteId: number): Promise<GroupAthlete> {
+    const groupAthlete = Array.from(this.groupAthletes.values()).find(ga => ga.groupId === groupId && ga.athleteId === athleteId);
+    if (!groupAthlete) throw new Error('Group athlete not found');
+    
+    groupAthlete.isEliminated = true;
+    groupAthlete.eliminatedAt = new Date();
+    
+    return groupAthlete;
+  }
+
   async getAllCategories(): Promise<Category[]> {
     return Array.from(this.categories.values());
   }
@@ -291,7 +514,7 @@ export class MemStorage implements IStorage {
     return newGroup;
   }
 
-  async addAthleteToGroup(groupId: number, athleteId: number): Promise<void> {
+  async addAthleteToLegacyGroup(groupId: number, athleteId: number): Promise<void> {
     const group = this.groups.get(groupId);
     if (!group) throw new Error('Group not found');
     
@@ -656,6 +879,27 @@ export class MemStorage implements IStorage {
       console.error('Error transferring athletes:', error);
       throw error;
     }
+  }
+
+  // Google Sheets Tournament Bracket Integration
+  async syncMainCategoriesToGoogleSheets(): Promise<void> {
+    // TODO: Implement sync to Kategori_utama sheet
+    console.log('Syncing main categories to Google Sheets - TODO');
+  }
+
+  async syncSubCategoriesToGoogleSheets(): Promise<void> {
+    // TODO: Implement sync to SubKategori sheet
+    console.log('Syncing sub categories to Google Sheets - TODO');
+  }
+
+  async syncAthleteGroupsToGoogleSheets(): Promise<void> {
+    // TODO: Implement sync to Kelompok_Atlet sheet
+    console.log('Syncing athlete groups to Google Sheets - TODO');
+  }
+
+  async syncGroupAthletesToGoogleSheets(): Promise<void> {
+    // TODO: Implement sync to daftar_kelompok sheet
+    console.log('Syncing group athletes to Google Sheets - TODO');
   }
 }
 

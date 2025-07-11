@@ -6,6 +6,14 @@ import type {
   InsertCategory, 
   Match, 
   InsertMatch,
+  MainCategory,
+  InsertMainCategory,
+  SubCategory,
+  InsertSubCategory,
+  AthleteGroup,
+  InsertAthleteGroup,
+  GroupAthlete,
+  InsertGroupAthlete,
   DashboardStats,
   ActiveMatch,
   GoogleSheetsCompetition,
@@ -101,5 +109,61 @@ export const api = {
 
   // Google Sheets sync (legacy)
   syncToGoogleSheets: (data: any, action: string) =>
-    apiRequest('POST', '/api/sheets/sync', { data, action }).then(res => res.json())
+    apiRequest('POST', '/api/sheets/sync', { data, action }).then(res => res.json()),
+
+  // Tournament Bracket API
+  // Main Categories (Kategori_utama)
+  getMainCategories: (): Promise<MainCategory[]> =>
+    fetch('/api/tournament/main-categories').then(res => res.json()),
+  
+  createMainCategory: (category: InsertMainCategory): Promise<MainCategory> =>
+    apiRequest('POST', '/api/tournament/main-categories', category).then(res => res.json()),
+  
+  updateMainCategory: (id: number, category: Partial<InsertMainCategory>): Promise<MainCategory> =>
+    apiRequest('PUT', `/api/tournament/main-categories/${id}`, category).then(res => res.json()),
+  
+  deleteMainCategory: (id: number): Promise<{ success: boolean }> =>
+    apiRequest('DELETE', `/api/tournament/main-categories/${id}`).then(res => res.json()),
+
+  // Sub Categories (SubKategori)
+  getSubCategories: (mainCategoryId: number): Promise<SubCategory[]> =>
+    fetch(`/api/tournament/main-categories/${mainCategoryId}/sub-categories`).then(res => res.json()),
+  
+  createSubCategory: (subCategory: InsertSubCategory): Promise<SubCategory> =>
+    apiRequest('POST', '/api/tournament/sub-categories', subCategory).then(res => res.json()),
+  
+  updateSubCategory: (id: number, subCategory: Partial<InsertSubCategory>): Promise<SubCategory> =>
+    apiRequest('PUT', `/api/tournament/sub-categories/${id}`, subCategory).then(res => res.json()),
+  
+  deleteSubCategory: (id: number): Promise<{ success: boolean }> =>
+    apiRequest('DELETE', `/api/tournament/sub-categories/${id}`).then(res => res.json()),
+
+  // Athlete Groups (Kelompok_Atlet)
+  getAthleteGroups: (subCategoryId: number): Promise<AthleteGroup[]> =>
+    fetch(`/api/tournament/sub-categories/${subCategoryId}/athlete-groups`).then(res => res.json()),
+  
+  createAthleteGroup: (athleteGroup: InsertAthleteGroup): Promise<AthleteGroup> =>
+    apiRequest('POST', '/api/tournament/athlete-groups', athleteGroup).then(res => res.json()),
+  
+  updateAthleteGroup: (id: number, athleteGroup: Partial<InsertAthleteGroup>): Promise<AthleteGroup> =>
+    apiRequest('PUT', `/api/tournament/athlete-groups/${id}`, athleteGroup).then(res => res.json()),
+  
+  deleteAthleteGroup: (id: number): Promise<{ success: boolean }> =>
+    apiRequest('DELETE', `/api/tournament/athlete-groups/${id}`).then(res => res.json()),
+
+  // Group Athletes (daftar_kelompok)
+  getGroupAthletes: (groupId: number): Promise<GroupAthlete[]> =>
+    fetch(`/api/tournament/athlete-groups/${groupId}/athletes`).then(res => res.json()),
+  
+  addAthleteToGroup: (groupId: number, athleteData: Omit<InsertGroupAthlete, 'groupId'>): Promise<GroupAthlete> =>
+    apiRequest('POST', `/api/tournament/athlete-groups/${groupId}/athletes`, athleteData).then(res => res.json()),
+  
+  removeAthleteFromGroup: (groupId: number, athleteId: number): Promise<{ success: boolean }> =>
+    apiRequest('DELETE', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}`).then(res => res.json()),
+  
+  updateAthletePosition: (groupId: number, athleteId: number, position: string, queueOrder?: number): Promise<GroupAthlete> =>
+    apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/position`, { position, queueOrder }).then(res => res.json()),
+  
+  eliminateAthlete: (groupId: number, athleteId: number): Promise<GroupAthlete> =>
+    apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/eliminate`).then(res => res.json())
 };

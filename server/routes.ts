@@ -2,7 +2,15 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertAthleteSchema, insertCategorySchema, insertMatchSchema } from "@shared/schema";
+import { 
+  insertAthleteSchema, 
+  insertCategorySchema, 
+  insertMatchSchema,
+  insertMainCategorySchema,
+  insertSubCategorySchema,
+  insertAthleteGroupSchema,
+  insertGroupAthleteSchema
+} from "@shared/schema";
 import { z } from "zod";
 
 const GOOGLE_SHEETS_CONFIG = {
@@ -249,6 +257,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(groups);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch groups' });
+    }
+  });
+
+  // Tournament Bracket API Routes
+  // Main Categories (Kategori_utama)
+  app.get('/api/tournament/main-categories', async (req, res) => {
+    try {
+      const categories = await storage.getAllMainCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch main categories' });
+    }
+  });
+
+  app.post('/api/tournament/main-categories', async (req, res) => {
+    try {
+      const validatedData = insertMainCategorySchema.parse(req.body);
+      const category = await storage.createMainCategory(validatedData);
+      broadcast({ type: 'main_category_created', data: category });
+      res.json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid main category data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to create main category' });
+      }
+    }
+  });
+
+  app.put('/api/tournament/main-categories/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertMainCategorySchema.partial().parse(req.body);
+      const category = await storage.updateMainCategory(id, validatedData);
+      broadcast({ type: 'main_category_updated', data: category });
+      res.json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid main category data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to update main category' });
+      }
+    }
+  });
+
+  app.delete('/api/tournament/main-categories/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteMainCategory(id);
+      broadcast({ type: 'main_category_deleted', data: { id } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete main category' });
+    }
+  });
+
+  // Sub Categories (SubKategori)
+  app.get('/api/tournament/main-categories/:id/sub-categories', async (req, res) => {
+    try {
+      const mainCategoryId = parseInt(req.params.id);
+      const subCategories = await storage.getSubCategoriesByMainCategory(mainCategoryId);
+      res.json(subCategories);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch sub categories' });
+    }
+  });
+
+  app.post('/api/tournament/sub-categories', async (req, res) => {
+    try {
+      const validatedData = insertSubCategorySchema.parse(req.body);
+      const subCategory = await storage.createSubCategory(validatedData);
+      broadcast({ type: 'sub_category_created', data: subCategory });
+      res.json(subCategory);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to create sub category' });
+      }
+    }
+  });
+
+  app.put('/api/tournament/sub-categories/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertSubCategorySchema.partial().parse(req.body);
+      const subCategory = await storage.updateSubCategory(id, validatedData);
+      broadcast({ type: 'sub_category_updated', data: subCategory });
+      res.json(subCategory);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to update sub category' });
+      }
+    }
+  });
+
+  app.delete('/api/tournament/sub-categories/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSubCategory(id);
+      broadcast({ type: 'sub_category_deleted', data: { id } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete sub category' });
+    }
+  });
+
+  // Athlete Groups (Kelompok_Atlet)
+  app.get('/api/tournament/sub-categories/:id/athlete-groups', async (req, res) => {
+    try {
+      const subCategoryId = parseInt(req.params.id);
+      const athleteGroups = await storage.getAthleteGroupsBySubCategory(subCategoryId);
+      res.json(athleteGroups);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch athlete groups' });
+    }
+  });
+
+  app.post('/api/tournament/athlete-groups', async (req, res) => {
+    try {
+      const validatedData = insertAthleteGroupSchema.parse(req.body);
+      const athleteGroup = await storage.createAthleteGroup(validatedData);
+      broadcast({ type: 'athlete_group_created', data: athleteGroup });
+      res.json(athleteGroup);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to create athlete group' });
+      }
+    }
+  });
+
+  app.put('/api/tournament/athlete-groups/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertAthleteGroupSchema.partial().parse(req.body);
+      const athleteGroup = await storage.updateAthleteGroup(id, validatedData);
+      broadcast({ type: 'athlete_group_updated', data: athleteGroup });
+      res.json(athleteGroup);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to update athlete group' });
+      }
+    }
+  });
+
+  app.delete('/api/tournament/athlete-groups/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAthleteGroup(id);
+      broadcast({ type: 'athlete_group_deleted', data: { id } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete athlete group' });
+    }
+  });
+
+  // Group Athletes (daftar_kelompok)
+  app.get('/api/tournament/athlete-groups/:id/athletes', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const groupAthletes = await storage.getGroupAthletesByGroup(groupId);
+      res.json(groupAthletes);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch group athletes' });
+    }
+  });
+
+  app.post('/api/tournament/athlete-groups/:id/athletes', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const validatedData = insertGroupAthleteSchema.parse({
+        ...req.body,
+        groupId
+      });
+      const groupAthlete = await storage.addAthleteToGroup(validatedData);
+      broadcast({ type: 'group_athlete_added', data: groupAthlete });
+      res.json(groupAthlete);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid group athlete data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to add athlete to group' });
+      }
+    }
+  });
+
+  app.delete('/api/tournament/athlete-groups/:groupId/athletes/:athleteId', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const athleteId = parseInt(req.params.athleteId);
+      await storage.removeAthleteFromGroup(groupId, athleteId);
+      broadcast({ type: 'group_athlete_removed', data: { groupId, athleteId } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to remove athlete from group' });
+    }
+  });
+
+  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/position', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const athleteId = parseInt(req.params.athleteId);
+      const { position, queueOrder } = req.body;
+      
+      const groupAthlete = await storage.updateAthletePosition(groupId, athleteId, position, queueOrder);
+      broadcast({ type: 'athlete_position_updated', data: groupAthlete });
+      res.json(groupAthlete);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update athlete position' });
+    }
+  });
+
+  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/eliminate', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const athleteId = parseInt(req.params.athleteId);
+      
+      const groupAthlete = await storage.eliminateAthlete(groupId, athleteId);
+      broadcast({ type: 'athlete_eliminated', data: groupAthlete });
+      res.json(groupAthlete);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to eliminate athlete' });
     }
   });
 

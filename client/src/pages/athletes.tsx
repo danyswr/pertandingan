@@ -1,43 +1,88 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Header } from "@/components/layout/header";
-import { LoadingOverlay } from "@/components/ui/loading-overlay";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtime } from "@/hooks/use-realtime";
 import { api } from "@/lib/api";
-import type { GoogleSheetsCompetition, GoogleSheetsAthlete } from "@shared/schema";
+import { Search, Filter, Users, Calendar, Download, RefreshCw } from "lucide-react";
+import type { GoogleSheetsCompetition, GoogleSheetsAthlete, Athlete } from "@shared/schema";
+
+// Interface untuk filter
+interface AthleteFilters {
+  search: string;
+  gender: string;
+  beratMin: string;
+  beratMax: string;
+  tinggiMin: string;
+  tinggiMax: string;
+  sabuk: string;
+  umurMin: string;
+  umurMax: string;
+  dojang: string;
+  kategori: string;
+  kelas: string;
+}
 
 export default function Athletes() {
-  const [selectedCompetition, setSelectedCompetition] = useState<GoogleSheetsCompetition | null>(null);
-  const [selectedAthletes, setSelectedAthletes] = useState<GoogleSheetsAthlete[]>([]);
+  // State untuk kejuaraan dan data
+  const [selectedCompetition, setSelectedCompetition] = useState<GoogleSheetsCompetition | null>(
+    () => {
+      const saved = localStorage.getItem('selectedCompetition');
+      return saved ? JSON.parse(saved) : null;
+    }
+  );
   const [showCompetitionDialog, setShowCompetitionDialog] = useState(false);
-  const [showAthleteDialog, setShowAthleteDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  
+  // State untuk filter
+  const [filters, setFilters] = useState<AthleteFilters>({
+    search: '',
+    gender: '',
+    beratMin: '',
+    beratMax: '',
+    tinggiMin: '',
+    tinggiMax: '',
+    sabuk: '',
+    umurMin: '',
+    umurMax: '',
+    dojang: '',
+    kategori: '',
+    kelas: ''
+  });
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isConnected, clearCache } = useRealtime();
+  const { isConnected } = useRealtime();
 
-  // Fetch competitions from Google Sheets dengan caching yang lebih baik
-  const { data: competitions, isLoading: competitionsLoading, refetch: refetchCompetitions } = useQuery({
+  // Fetch data atlet yang sudah di-transfer ke sistem manajemen
+  const { data: managementAthletes, isLoading: managementLoading, refetch: refetchManagementAthletes } = useQuery({
+    queryKey: ['athletes'],
+    queryFn: api.getAllAthletes,
+    staleTime: 10000,
+    refetchInterval: 30000
+  });
+
+  // Fetch competitions from Google Sheets (hanya untuk import baru)
+  const { data: competitions, isLoading: competitionsLoading } = useQuery({
     queryKey: ['google-sheets-competitions'],
     queryFn: api.getCompetitionsFromGoogleSheets,
     enabled: showCompetitionDialog,
-    staleTime: 30000, // Cache selama 30 detik
-    cacheTime: 300000 // Keep in cache for 5 minutes
+    staleTime: 30000
   });
 
-  // Fetch athletes from selected competition dengan auto-refresh
-  const { data: competitionAthletes, isLoading: athletesLoading, refetch: refetchAthletes } = useQuery({
+  // Fetch athletes from selected competition (hanya untuk import baru)
+  const { data: competitionAthletes, isLoading: athletesLoading } = useQuery({
     queryKey: ['google-sheets-athletes', selectedCompetition?.id],
     queryFn: () => api.getAthletesFromCompetition(selectedCompetition!.id),
-    enabled: !!selectedCompetition && showAthleteDialog,
-    staleTime: 10000, // Cache selama 10 detik
-    cacheTime: 60000, // Keep in cache for 1 minute
-    refetchInterval: 30000 // Auto-refresh setiap 30 detik
+    enabled: !!selectedCompetition && showImportDialog,
+    staleTime: 10000
   });
 
   // Transfer athletes mutation
@@ -48,8 +93,7 @@ export default function Athletes() {
         title: "Transfer Berhasil",
         description: `${data.count} atlet telah dipindahkan ke sistem manajemen`,
       });
-      setShowAthleteDialog(false);
-      setSelectedAthletes([]);
+      setShowImportDialog(false);
       queryClient.invalidateQueries({ queryKey: ['athletes'] });
     },
     onError: (error) => {
@@ -61,250 +105,498 @@ export default function Athletes() {
     }
   });
 
+  // Fungsi untuk menghitung umur dari tanggal lahir
+  const calculateAge = (birthDate: string): number => {
+    try {
+      // Parse format Indonesia "Jakarta, 01-01-2000" atau "01-01-2000"
+      const dateStr = birthDate.includes(',') ? birthDate.split(',')[1].trim() : birthDate;
+      const [day, month, year] = dateStr.split('-').map(num => parseInt(num));
+      const birth = new Date(year, month - 1, day);
+      const today = new Date();
+      const age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        return age - 1;
+      }
+      return age;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Filter data atlet berdasarkan kriteria
+  const filteredAthletes = useMemo(() => {
+    if (!managementAthletes) return [];
+    
+    return managementAthletes.filter(athlete => {
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const matchesSearch = 
+          athlete.name.toLowerCase().includes(searchLower) ||
+          athlete.dojang.toLowerCase().includes(searchLower) ||
+          athlete.category.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Gender filter
+      if (filters.gender && athlete.gender !== filters.gender) return false;
+
+      // Berat badan range
+      if (filters.beratMin && athlete.weight < parseInt(filters.beratMin)) return false;
+      if (filters.beratMax && athlete.weight > parseInt(filters.beratMax)) return false;
+
+      // Tinggi badan range
+      if (filters.tinggiMin && athlete.height < parseInt(filters.tinggiMin)) return false;
+      if (filters.tinggiMax && athlete.height > parseInt(filters.tinggiMax)) return false;
+
+      // Sabuk filter
+      if (filters.sabuk && athlete.belt !== filters.sabuk) return false;
+
+      // Umur range
+      const age = calculateAge(athlete.birthDate);
+      if (filters.umurMin && age < parseInt(filters.umurMin)) return false;
+      if (filters.umurMax && age > parseInt(filters.umurMax)) return false;
+
+      // Dojang filter
+      if (filters.dojang && !athlete.dojang.toLowerCase().includes(filters.dojang.toLowerCase())) return false;
+
+      // Kategori filter
+      if (filters.kategori && athlete.category !== filters.kategori) return false;
+
+      // Kelas filter
+      if (filters.kelas && athlete.class !== filters.kelas) return false;
+
+      return true;
+    });
+  }, [managementAthletes, filters]);
+
+  // Simpan kejuaraan yang dipilih ke localStorage
+  useEffect(() => {
+    if (selectedCompetition) {
+      localStorage.setItem('selectedCompetition', JSON.stringify(selectedCompetition));
+    }
+  }, [selectedCompetition]);
+
   const handleSelectCompetition = (competition: GoogleSheetsCompetition) => {
     setSelectedCompetition(competition);
     setShowCompetitionDialog(false);
-    setShowAthleteDialog(true);
+    setShowImportDialog(true);
   };
 
-  const handleToggleAthlete = (athlete: GoogleSheetsAthlete, checked: boolean) => {
-    if (checked) {
-      setSelectedAthletes(prev => [...prev, athlete]);
-    } else {
-      setSelectedAthletes(prev => prev.filter(a => a.registrationId !== athlete.registrationId));
-    }
+  const handleChangeCompetition = () => {
+    setSelectedCompetition(null);
+    localStorage.removeItem('selectedCompetition');
+    setShowCompetitionDialog(true);
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked && competitionAthletes) {
-      setSelectedAthletes(competitionAthletes);
-    } else {
-      setSelectedAthletes([]);
+  const handleTransferAllAthletes = () => {
+    if (competitionAthletes) {
+      transferAthletesMutation.mutate({ athletes: competitionAthletes });
     }
   };
 
-  const handleTransferAthletes = () => {
-    if (selectedAthletes.length === 0) {
-      toast({
-        title: "Pilih Atlet",
-        description: "Silakan pilih minimal satu atlet untuk dipindahkan",
-        variant: "destructive",
-      });
-      return;
-    }
-    transferAthletesMutation.mutate(selectedAthletes);
-  };
-
-  const handleRefreshData = async () => {
-    await clearCache();
-    if (showCompetitionDialog) {
-      refetchCompetitions();
-    }
-    if (showAthleteDialog) {
-      refetchAthletes();
-    }
-    toast({
-      title: "Data Diperbarui",
-      description: "Data dari Google Sheets telah diperbarui",
+  const resetFilters = () => {
+    setFilters({
+      search: '',
+      gender: '',
+      beratMin: '',
+      beratMax: '',
+      tinggiMin: '',
+      tinggiMax: '',
+      sabuk: '',
+      umurMin: '',
+      umurMax: '',
+      dojang: '',
+      kategori: '',
+      kelas: ''
     });
   };
 
+  // Get unique values for filter options
+  const filterOptions = useMemo(() => {
+    if (!managementAthletes) return {};
+    
+    return {
+      genders: [...new Set(managementAthletes.map(a => a.gender))],
+      belts: [...new Set(managementAthletes.map(a => a.belt))],
+      dojangs: [...new Set(managementAthletes.map(a => a.dojang))],
+      categories: [...new Set(managementAthletes.map(a => a.category))],
+      classes: [...new Set(managementAthletes.map(a => a.class))]
+    };
+  }, [managementAthletes]);
+
   return (
-    <div className="p-6">
+    <div className="space-y-6">
       <Header 
-        title="Manajemen Atlet" 
-        subtitle="Kelola data atlet dan sinkronisasi dengan Google Sheets"
-        onRefresh={handleRefreshData}
+        title={selectedCompetition ? `${selectedCompetition.nama}` : "Manajemen Atlet"} 
+        subtitle={selectedCompetition ? `${filteredAthletes.length} atlet • Sistem Manajemen Turnamen` : "Pilih kejuaraan untuk mengelola data atlet"}
+        onRefresh={refetchManagementAthletes}
       />
-      
-      {/* Connection Status */}
-      <div className="mb-4 flex justify-end">
-        <Badge variant={isConnected ? "default" : "destructive"}>
-          {isConnected ? "🟢 Real-time aktif" : "🔴 Offline"}
-        </Badge>
+
+      {/* Main Actions */}
+      <div className="flex gap-4">
+        {selectedCompetition ? (
+          <>
+            <Button variant="outline" onClick={handleChangeCompetition}>
+              <Calendar className="w-4 h-4 mr-2" />
+              Ganti Kejuaraan
+            </Button>
+            <Button onClick={() => setShowImportDialog(true)}>
+              <Download className="w-4 h-4 mr-2" />
+              Import Atlet Baru
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => setShowCompetitionDialog(true)} className="w-full">
+            <Calendar className="w-4 h-4 mr-2" />
+            Pilih Kejuaraan
+          </Button>
+        )}
       </div>
-      
-      <LoadingOverlay isVisible={competitionsLoading || athletesLoading || transferAthletesMutation.isPending} />
-      
-      {/* Main Action Card */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
-              <i className="fas fa-download text-white"></i>
-            </div>
-            Import Atlet dari Google Sheets
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground mb-4">
-            Ambil data atlet dari spreadsheet kejuaraan dan pindahkan ke sistem manajemen turnamen.
-          </p>
-          <div className="flex gap-3">
-            <Dialog open={showCompetitionDialog} onOpenChange={setShowCompetitionDialog}>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <i className="fas fa-table mr-2"></i>
-                  Pilih Kejuaraan
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Pilih Kejuaraan dari Google Sheets</DialogTitle>
-                </DialogHeader>
-                <div className="flex justify-between items-center mb-4">
-                  <p className="text-sm text-muted-foreground">
-                    Pilih kejuaraan yang ingin diambil data atletnya
-                  </p>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => refetchCompetitions()}
-                    disabled={competitionsLoading}
-                  >
-                    <i className="fas fa-refresh mr-2"></i>
-                    Refresh
-                  </Button>
-                </div>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                {competitions?.map((competition) => (
-                  <Card 
-                    key={competition.id} 
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => handleSelectCompetition(competition)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold">{competition.nama}</h3>
-                          <p className="text-sm text-muted-foreground">{competition.deskripsi}</p>
-                          <p className="text-xs text-muted-foreground mt-1">ID: {competition.id}</p>
-                        </div>
-                        <Badge variant={competition.status === 1 ? "default" : "secondary"}>
-                          {competition.status === 1 ? "Aktif" : "Selesai"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Athletes Selection Dialog */}
-      <Dialog open={showAthleteDialog} onOpenChange={setShowAthleteDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>
-              Pilih Atlet dari: {selectedCompetition?.nama}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Control Bar */}
-            <div className="flex items-center justify-between border-b pb-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="select-all"
-                  checked={selectedAthletes.length === competitionAthletes?.length && competitionAthletes?.length > 0}
-                  onCheckedChange={handleSelectAll}
+      {selectedCompetition && (
+        <>
+          {/* Filter Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Filter & Pencarian
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="ml-auto">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reset
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Cari nama atlet, dojang, atau kategori..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="pl-10"
                 />
-                <label htmlFor="select-all" className="text-sm font-medium">
-                  Pilih Semua ({competitionAthletes?.length || 0} atlet)
-                </label>
               </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => refetchAthletes()}
-                  disabled={athletesLoading}
-                >
-                  <i className="fas fa-refresh mr-2"></i>
-                  Refresh Data
-                </Button>
-                <Badge variant={athletesLoading ? "secondary" : "default"}>
-                  {athletesLoading ? "Memuat..." : `${competitionAthletes?.length || 0} atlet`}
-                </Badge>
-              </div>
-              <Badge variant="secondary">
-                {selectedAthletes.length} dipilih
-              </Badge>
-            </div>
 
-            {/* Athletes List */}
-            <div className="max-h-96 overflow-y-auto space-y-2">
-              {competitionAthletes?.map((athlete) => (
-                <div 
-                  key={athlete.registrationId} 
-                  className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50"
-                >
-                  <Checkbox
-                    checked={selectedAthletes.some(a => a.registrationId === athlete.registrationId)}
-                    onCheckedChange={(checked) => handleToggleAthlete(athlete, checked as boolean)}
-                  />
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <div>
-                      <p className="font-medium">{athlete.nama}</p>
-                      <p className="text-xs text-muted-foreground">{athlete.dojang}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm">{athlete.gender} - {athlete.sabuk}</p>
-                      <p className="text-xs text-muted-foreground">{athlete.berat}kg / {athlete.tinggi}cm</p>
-                    </div>
-                    <div>
-                      <p className="text-sm">{athlete.kategori}</p>
-                      <p className="text-xs text-muted-foreground">Kelas: {athlete.kelas}</p>
-                    </div>
+              {/* Filter Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div>
+                  <Label>Gender</Label>
+                  <Select value={filters.gender} onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua</SelectItem>
+                      {filterOptions.genders?.map(gender => (
+                        <SelectItem key={gender} value={gender}>{gender}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Sabuk</Label>
+                  <Select value={filters.sabuk} onValueChange={(value) => setFilters(prev => ({ ...prev, sabuk: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua</SelectItem>
+                      {filterOptions.belts?.map(belt => (
+                        <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Kategori</Label>
+                  <Select value={filters.kategori} onValueChange={(value) => setFilters(prev => ({ ...prev, kategori: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua</SelectItem>
+                      {filterOptions.categories?.map(category => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Kelas</Label>
+                  <Select value={filters.kelas} onValueChange={(value) => setFilters(prev => ({ ...prev, kelas: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua</SelectItem>
+                      {filterOptions.classes?.map(cls => (
+                        <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Dojang</Label>
+                  <Select value={filters.dojang} onValueChange={(value) => setFilters(prev => ({ ...prev, dojang: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Semua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua</SelectItem>
+                      {filterOptions.dojangs?.map(dojang => (
+                        <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Range Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label>Berat Min (kg)</Label>
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={filters.beratMin}
+                      onChange={(e) => setFilters(prev => ({ ...prev, beratMin: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label>Berat Max (kg)</Label>
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={filters.beratMax}
+                      onChange={(e) => setFilters(prev => ({ ...prev, beratMax: e.target.value }))}
+                    />
                   </div>
                 </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label>Tinggi Min (cm)</Label>
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={filters.tinggiMin}
+                      onChange={(e) => setFilters(prev => ({ ...prev, tinggiMin: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label>Tinggi Max (cm)</Label>
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={filters.tinggiMax}
+                      onChange={(e) => setFilters(prev => ({ ...prev, tinggiMax: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label>Umur Min</Label>
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={filters.umurMin}
+                      onChange={(e) => setFilters(prev => ({ ...prev, umurMin: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label>Umur Max</Label>
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={filters.umurMax}
+                      onChange={(e) => setFilters(prev => ({ ...prev, umurMax: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Athletes Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Data Atlet ({filteredAthletes.length})</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className={isConnected ? 'text-green-600' : 'text-red-600'}>
+                    {isConnected ? 'Real-time' : 'Offline'}
+                  </span>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {managementLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2">Memuat data atlet...</span>
+                </div>
+              ) : filteredAthletes.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Tidak ada atlet yang ditemukan</p>
+                  <p className="text-sm text-gray-400 mt-1">Coba ubah filter atau import atlet baru</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3">Nama</th>
+                        <th className="text-left p-3">Gender</th>
+                        <th className="text-left p-3">Umur</th>
+                        <th className="text-left p-3">Dojang</th>
+                        <th className="text-left p-3">Sabuk</th>
+                        <th className="text-left p-3">Berat/Tinggi</th>
+                        <th className="text-left p-3">Kategori</th>
+                        <th className="text-left p-3">Kelas</th>
+                        <th className="text-left p-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAthletes.map((athlete) => (
+                        <tr key={athlete.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 font-medium">{athlete.name}</td>
+                          <td className="p-3">{athlete.gender}</td>
+                          <td className="p-3">{calculateAge(athlete.birthDate)} tahun</td>
+                          <td className="p-3">{athlete.dojang}</td>
+                          <td className="p-3">
+                            <Badge variant="outline">{athlete.belt}</Badge>
+                          </td>
+                          <td className="p-3">{athlete.weight}kg / {athlete.height}cm</td>
+                          <td className="p-3">{athlete.category}</td>
+                          <td className="p-3">{athlete.class}</td>
+                          <td className="p-3">
+                            <Badge variant={athlete.isPresent ? "default" : "secondary"}>
+                              {athlete.isPresent ? "Hadir" : "Belum Hadir"}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Dialog untuk memilih kejuaraan */}
+      <Dialog open={showCompetitionDialog} onOpenChange={setShowCompetitionDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pilih Kejuaraan</DialogTitle>
+          </DialogHeader>
+          
+          {competitionsLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2">Memuat data kejuaraan...</span>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {competitions?.map((competition) => (
+                <Card 
+                  key={competition.id} 
+                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => handleSelectCompetition(competition)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
+                      <img 
+                        src={competition.poster} 
+                        alt={competition.nama}
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg">{competition.nama}</h3>
+                        <p className="text-gray-600 text-sm mt-1">{competition.deskripsi}</p>
+                        <Badge variant={competition.status === 1 ? "default" : "secondary"} className="mt-2">
+                          {competition.status === 1 ? "Aktif" : "Tidak Aktif"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-2 border-t pt-4">
-              <Button variant="outline" onClick={() => setShowAthleteDialog(false)}>
-                Batal
-              </Button>
-              <Button 
-                onClick={handleTransferAthletes}
-                disabled={selectedAthletes.length === 0 || transferAthletesMutation.isPending}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <i className="fas fa-upload mr-2"></i>
-                Transfer {selectedAthletes.length} Atlet
-              </Button>
-            </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* Current Selection Summary */}
-      {selectedCompetition && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Kejuaraan Terpilih</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold">{selectedCompetition.nama}</h3>
-                <p className="text-sm text-muted-foreground">{selectedCompetition.deskripsi}</p>
-              </div>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowAthleteDialog(true)}
-                disabled={!competitionAthletes}
-              >
-                <i className="fas fa-users mr-2"></i>
-                Lihat Atlet ({competitionAthletes?.length || 0})
-              </Button>
+      {/* Dialog untuk import atlet baru */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Import Atlet dari {selectedCompetition?.nama}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {athletesLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2">Memuat data atlet...</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  {competitionAthletes?.length || 0} atlet tersedia untuk import
+                </p>
+                <Button
+                  onClick={handleTransferAllAthletes}
+                  disabled={!competitionAthletes || competitionAthletes.length === 0 || transferAthletesMutation.isPending}
+                >
+                  {transferAthletesMutation.isPending ? 'Memproses...' : `Import Semua Atlet (${competitionAthletes?.length || 0})`}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 max-h-[400px] overflow-y-auto">
+                {competitionAthletes?.map((athlete) => (
+                  <Card key={athlete.registrationId} className="p-3">
+                    <div className="grid grid-cols-4 gap-2 text-sm">
+                      <div>
+                        <span className="font-medium">{athlete.nama}</span>
+                        <div className="text-gray-500">{athlete.gender}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">{athlete.dojang}</span>
+                        <div className="text-gray-500">{athlete.sabuk}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">{athlete.kategori}</span>
+                        <div className="text-gray-500">{athlete.kelas}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">{athlete.berat}kg</span>
+                        <div className="text-gray-500">{athlete.tinggi}cm</div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

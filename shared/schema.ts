@@ -5,13 +5,15 @@ import { z } from "zod";
 // Athletes table
 export const athletes = pgTable("athletes", {
   id: serial("id").primaryKey(),
-  nama_lengkap: text("nama_lengkap").notNull(),
+  name: text("name").notNull(),
   gender: varchar("gender", { length: 10 }).notNull(),
   dojang: text("dojang").notNull(),
-  sabuk: text("sabuk").notNull(),
-  berat_badan: integer("berat_badan").notNull(),
-  tinggi_badan: integer("tinggi_badan").notNull(),
-  kategori: text("kategori").notNull(),
+  belt: text("belt").notNull(),
+  weight: integer("weight").notNull(),
+  height: integer("height").notNull(),
+  category: text("category").notNull(),
+  class: text("class"),
+  birthDate: text("birth_date"),
   isPresent: boolean("is_present").default(false),
   status: varchar("status", { length: 20 }).default("available"), // available, competing, eliminated
   competitionId: text("competition_id")

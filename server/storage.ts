@@ -140,11 +140,45 @@ export class MemStorage implements IStorage {
   }
 
   async getAllAthletes(): Promise<Athlete[]> {
-    return Array.from(this.athletes.values());
+    const rawAthletes = Array.from(this.athletes.values());
+    // Map Indonesian field names to English field names for frontend compatibility
+    return rawAthletes.map(athlete => ({
+      id: athlete.id,
+      name: (athlete as any).namaLengkap || athlete.name,
+      gender: athlete.gender,
+      birthDate: (athlete as any).tglLahir || athlete.birthDate,
+      dojang: athlete.dojang,
+      belt: (athlete as any).sabuk || athlete.belt,
+      weight: (athlete as any).beratBadan || athlete.weight,
+      height: (athlete as any).tinggiBadan || athlete.height,
+      category: (athlete as any).kategori || athlete.category,
+      class: (athlete as any).kelas || athlete.class,
+      isPresent: athlete.isPresent,
+      status: athlete.status,
+      competitionId: athlete.competitionId
+    }));
   }
 
   async getAthleteById(id: number): Promise<Athlete | undefined> {
-    return this.athletes.get(id);
+    const athlete = this.athletes.get(id);
+    if (!athlete) return undefined;
+    
+    // Map Indonesian field names to English field names for frontend compatibility
+    return {
+      id: athlete.id,
+      name: (athlete as any).namaLengkap || athlete.name,
+      gender: athlete.gender,
+      birthDate: (athlete as any).tglLahir || athlete.birthDate,
+      dojang: athlete.dojang,
+      belt: (athlete as any).sabuk || athlete.belt,
+      weight: (athlete as any).beratBadan || athlete.weight,
+      height: (athlete as any).tinggiBadan || athlete.height,
+      category: (athlete as any).kategori || athlete.category,
+      class: (athlete as any).kelas || athlete.class,
+      isPresent: athlete.isPresent,
+      status: athlete.status,
+      competitionId: athlete.competitionId
+    };
   }
 
   async createAthlete(athlete: InsertAthlete): Promise<Athlete> {
@@ -601,17 +635,18 @@ export class MemStorage implements IStorage {
       for (const athleteData of transferData) {
         const newAthlete: Athlete = { 
           id: this.currentAthleteId++,
-          idAtlet: athleteData.id_atlet,
-          namaLengkap: athleteData.nama_lengkap,
+          name: athleteData.nama_lengkap,
           gender: athleteData.gender,
-          tglLahir: athleteData.tgl_lahir,
+          birthDate: athleteData.tgl_lahir,
           dojang: athleteData.dojang,
-          sabuk: athleteData.sabuk,
-          beratBadan: athleteData.berat_badan,
-          tinggiBadan: athleteData.tinggi_badan,
-          kategori: athleteData.kategori,
-          kelas: athleteData.kelas,
-          isPresent: false
+          belt: athleteData.sabuk,
+          weight: athleteData.berat_badan,
+          height: athleteData.tinggi_badan,
+          category: athleteData.kategori,
+          class: athleteData.kelas,
+          isPresent: false,
+          status: athleteData.status,
+          competitionId: undefined
         };
         this.athletes.set(newAthlete.id, newAthlete);
       }

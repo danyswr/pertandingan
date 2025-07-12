@@ -161,8 +161,8 @@ export const api = {
   getGroupAthletes: (groupId: number): Promise<GroupAthlete[]> =>
     fetch(`/api/tournament/athlete-groups/${groupId}/athletes`).then(res => res.json()),
   
-  addAthleteToGroup: (groupId: number, athleteData: Omit<InsertGroupAthlete, 'groupId'>): Promise<GroupAthlete> =>
-    apiRequest('POST', `/api/tournament/athlete-groups/${groupId}/athletes`, athleteData).then(res => res.json()),
+  addAthleteToGroup: (groupAthlete: InsertGroupAthlete): Promise<GroupAthlete> =>
+    apiRequest('POST', `/api/tournament/athlete-groups/${groupAthlete.athleteGroupId}/athletes`, groupAthlete).then(res => res.json()),
   
   removeAthleteFromGroup: (groupId: number, athleteId: number): Promise<{ success: boolean }> =>
     apiRequest('DELETE', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}`).then(res => res.json()),

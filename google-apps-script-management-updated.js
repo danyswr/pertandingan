@@ -254,6 +254,43 @@ function initializeSheets() {
     ]]);
   }
   
-  console.log('Sheets initialized successfully');
-  return 'Sheets initialized successfully';
+  // Sheet Kategori_Utama
+  let mainCategorySheet = spreadsheet.getSheetByName('Kategori_Utama');
+  if (!mainCategorySheet) {
+    mainCategorySheet = spreadsheet.insertSheet('Kategori_Utama');
+    mainCategorySheet.getRange(1, 1, 1, 2).setValues([[
+      'id_kategori', 'nama_kategori'
+    ]]);
+  }
+  
+  // Sheet SubKategori
+  let subCategorySheet = spreadsheet.getSheetByName('SubKategori');
+  if (!subCategorySheet) {
+    subCategorySheet = spreadsheet.insertSheet('SubKategori');
+    subCategorySheet.getRange(1, 1, 1, 4).setValues([[
+      'id_subkategori', 'id_kategori_utama', 'Nomor', 'judul_subkategori'
+    ]]);
+  }
+  
+  // Sheet Kelompok_Atlet
+  let athleteGroupSheet = spreadsheet.getSheetByName('Kelompok_Atlet');
+  if (!athleteGroupSheet) {
+    athleteGroupSheet = spreadsheet.insertSheet('Kelompok_Atlet');
+    athleteGroupSheet.getRange(1, 1, 1, 5).setValues([[
+      'id_kel', 'id_SubKelompok', 'Judul', 'Nomor', 'Keterangan'
+    ]]);
+  }
+  
+  // Sheet daftar_kelompok
+  let groupListSheet = spreadsheet.getSheetByName('daftar_kelompok');
+  if (!groupListSheet) {
+    groupListSheet = spreadsheet.insertSheet('daftar_kelompok');
+    groupListSheet.getRange(1, 1, 1, 9).setValues([[
+      'id_daftarKelompok', 'id_kelompokAtlet', 'nama_atlet', 'Berat_badan', 
+      'Tinggi_badan', 'sabuk', 'umur', 'MB', 'Nomor'
+    ]]);
+  }
+  
+  console.log('All sheets initialized successfully');
+  return 'All sheets initialized successfully';
 }

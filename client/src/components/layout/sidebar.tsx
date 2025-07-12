@@ -15,12 +15,6 @@ const navigation = [
     section: "athletes"
   },
   {
-    name: "Bracket Turnamen",
-    href: "/tournament-bracket",
-    icon: "fas fa-sitemap",
-    section: "tournament-bracket"
-  },
-  {
     name: "Pertandingan",
     href: "/matches",
     icon: "fas fa-trophy",

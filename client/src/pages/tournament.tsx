@@ -65,6 +65,7 @@ export default function Tournament() {
   const [ageRange, setAgeRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [weightRange, setWeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [heightRange, setHeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
+  const [contextMenu, setContextMenu] = useState<{athlete: Athlete; x: number; y: number; currentPosition: 'red' | 'blue' | 'queue'} | null>(null);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -151,6 +152,7 @@ export default function Tournament() {
     setAgeRange({min: '', max: ''});
     setWeightRange({min: '', max: ''});
     setHeightRange({min: '', max: ''});
+    setContextMenu(null);
   };
 
   // Handle athlete card click based on active selection
@@ -183,6 +185,47 @@ export default function Tournament() {
 
   const removeAthleteFromQueue = (athleteId: number) => {
     setSelectedQueue(prev => prev.filter(a => a.id !== athleteId));
+  };
+
+  // Handle right-click context menu
+  const handleAthleteRightClick = (e: React.MouseEvent, athlete: Athlete) => {
+    e.preventDefault();
+    
+    let currentPosition: 'red' | 'blue' | 'queue' | null = null;
+    if (selectedRedCorner?.id === athlete.id) currentPosition = 'red';
+    else if (selectedBlueCorner?.id === athlete.id) currentPosition = 'blue';
+    else if (selectedQueue.find(qa => qa.id === athlete.id)) currentPosition = 'queue';
+    
+    if (currentPosition) {
+      setContextMenu({
+        athlete,
+        x: e.clientX,
+        y: e.clientY,
+        currentPosition
+      });
+    }
+  };
+
+  // Switch athlete position
+  const switchAthletePosition = (athlete: Athlete, newPosition: 'red' | 'blue' | 'queue') => {
+    const currentPosition = selectedRedCorner?.id === athlete.id ? 'red' :
+                           selectedBlueCorner?.id === athlete.id ? 'blue' : 'queue';
+    
+    // Remove from current position
+    if (currentPosition === 'red') setSelectedRedCorner(null);
+    else if (currentPosition === 'blue') setSelectedBlueCorner(null);
+    else if (currentPosition === 'queue') removeAthleteFromQueue(athlete.id);
+    
+    // Add to new position
+    if (newPosition === 'red' && !selectedRedCorner) {
+      setSelectedRedCorner(athlete);
+    } else if (newPosition === 'blue' && !selectedBlueCorner) {
+      setSelectedBlueCorner(athlete);
+    } else if (newPosition === 'queue' && !selectedQueue.find(qa => qa.id === athlete.id)) {
+      setSelectedQueue(prev => [...prev, athlete]);
+    }
+    
+    setContextMenu(null);
   };
 
   // Mutations
@@ -874,11 +917,11 @@ export default function Tournament() {
                       {/* Red Corner */}
                       <div 
                         className={cn(
-                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'red' 
                             ? "border-red-500 bg-red-100 shadow-lg ring-2 ring-red-200 animate-pulse" 
                             : "border-red-200 bg-red-50/50 hover:bg-red-100/50",
-                          selectedRedCorner && "bg-red-100"
+                          selectedRedCorner && "bg-red-100 scale-105 border-red-400 shadow-md ring-2 ring-red-300"
                         )}
                         onClick={() => setActiveSelection(activeSelection === 'red' ? null : 'red')}
                       >
@@ -909,10 +952,14 @@ export default function Tournament() {
                           )}
                         </div>
                         {selectedRedCorner ? (
-                          <div className="space-y-1">
+                          <div 
+                            className="space-y-1"
+                            onContextMenu={(e) => handleAthleteRightClick(e, selectedRedCorner)}
+                          >
                             <p className="font-medium text-sm">{selectedRedCorner.name}</p>
                             <p className="text-xs text-gray-600">{selectedRedCorner.dojang}</p>
                             <p className="text-xs text-gray-600">{selectedRedCorner.belt} • {selectedRedCorner.weight}kg • {selectedRedCorner.gender}</p>
+                            <p className="text-xs text-gray-400">Klik kanan untuk pindah posisi</p>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500 italic">Belum dipilih</p>
@@ -922,11 +969,11 @@ export default function Tournament() {
                       {/* Blue Corner */}
                       <div 
                         className={cn(
-                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'blue' 
                             ? "border-blue-500 bg-blue-100 shadow-lg ring-2 ring-blue-200 animate-pulse" 
                             : "border-blue-200 bg-blue-50/50 hover:bg-blue-100/50",
-                          selectedBlueCorner && "bg-blue-100"
+                          selectedBlueCorner && "bg-blue-100 scale-105 border-blue-400 shadow-md ring-2 ring-blue-300"
                         )}
                         onClick={() => setActiveSelection(activeSelection === 'blue' ? null : 'blue')}
                       >
@@ -957,10 +1004,14 @@ export default function Tournament() {
                           )}
                         </div>
                         {selectedBlueCorner ? (
-                          <div className="space-y-1">
+                          <div 
+                            className="space-y-1"
+                            onContextMenu={(e) => handleAthleteRightClick(e, selectedBlueCorner)}
+                          >
                             <p className="font-medium text-sm">{selectedBlueCorner.name}</p>
                             <p className="text-xs text-gray-600">{selectedBlueCorner.dojang}</p>
                             <p className="text-xs text-gray-600">{selectedBlueCorner.belt} • {selectedBlueCorner.weight}kg • {selectedBlueCorner.gender}</p>
+                            <p className="text-xs text-gray-400">Klik kanan untuk pindah posisi</p>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500 italic">Belum dipilih</p>
@@ -970,10 +1021,11 @@ export default function Tournament() {
                       {/* Queue */}
                       <div 
                         className={cn(
-                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'queue' 
                             ? "border-gray-500 bg-gray-100 shadow-lg ring-2 ring-gray-200 animate-pulse" 
-                            : "border-gray-200 bg-gray-50/50 hover:bg-gray-100/50"
+                            : "border-gray-200 bg-gray-50/50 hover:bg-gray-100/50",
+                          selectedQueue.length > 0 && "bg-gray-100 scale-105 border-gray-400 shadow-md ring-2 ring-gray-300"
                         )}
                         onClick={() => setActiveSelection(activeSelection === 'queue' ? null : 'queue')}
                       >
@@ -988,10 +1040,15 @@ export default function Tournament() {
                         {selectedQueue.length > 0 ? (
                           <div className="space-y-2">
                             {selectedQueue.map((athlete, index) => (
-                              <div key={athlete.id} className="flex items-center justify-between bg-white p-2 rounded border">
+                              <div 
+                                key={athlete.id} 
+                                className="flex items-center justify-between bg-white p-2 rounded border"
+                                onContextMenu={(e) => handleAthleteRightClick(e, athlete)}
+                              >
                                 <div>
                                   <p className="font-medium text-sm">#{index + 1} {athlete.name}</p>
                                   <p className="text-xs text-gray-600">{athlete.dojang} • {athlete.belt}</p>
+                                  <p className="text-xs text-gray-400">Klik kanan untuk pindah posisi</p>
                                 </div>
                                 <Button 
                                   type="button" 
@@ -1254,24 +1311,12 @@ export default function Tournament() {
                                     <p className="text-xs text-gray-500">
                                       Umur: {athlete.age} • Tinggi: {athlete.height}cm
                                     </p>
+                                    {activeSelection && (
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Klik untuk {activeSelection === 'red' ? 'menempatkan di sudut merah' : activeSelection === 'blue' ? 'menempatkan di sudut biru' : 'menambah ke antrian'}
+                                      </p>
+                                    )}
                                   </div>
-                                  {activeSelection && (
-                                    <div className="flex gap-2 mt-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className={cn(
-                                          "flex-1 text-xs pointer-events-none",
-                                          activeSelection === 'red' ? "border-red-200 text-red-600 bg-red-50" :
-                                          activeSelection === 'blue' ? "border-blue-200 text-blue-600 bg-blue-50" :
-                                          "border-gray-200 text-gray-600 bg-gray-50"
-                                        )}
-                                      >
-                                        {activeSelection === 'red' ? 'Pilih Merah' :
-                                         activeSelection === 'blue' ? 'Pilih Biru' : '+ Antrian'}
-                                      </Button>
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             ))}
@@ -1283,8 +1328,53 @@ export default function Tournament() {
                 </div>
               </div>
             )}
+
+            {/* Context Menu */}
+            {contextMenu && (
+              <div 
+                className="fixed bg-white border shadow-lg rounded-lg py-2 z-50"
+                style={{ left: contextMenu.x, top: contextMenu.y }}
+                onMouseLeave={() => setContextMenu(null)}
+              >
+                <div className="px-3 py-1 text-xs text-gray-500 border-b mb-1">
+                  {contextMenu.athlete.name}
+                </div>
+                {contextMenu.currentPosition !== 'red' && !selectedRedCorner && (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600"
+                    onClick={() => switchAthletePosition(contextMenu.athlete, 'red')}
+                  >
+                    Pindah ke Sudut Merah
+                  </button>
+                )}
+                {contextMenu.currentPosition !== 'blue' && !selectedBlueCorner && (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-blue-600"
+                    onClick={() => switchAthletePosition(contextMenu.athlete, 'blue')}
+                  >
+                    Pindah ke Sudut Biru
+                  </button>
+                )}
+                {contextMenu.currentPosition !== 'queue' && (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-600"
+                    onClick={() => switchAthletePosition(contextMenu.athlete, 'queue')}
+                  >
+                    Pindah ke Antrian
+                  </button>
+                )}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
+
+        {/* Overlay to close context menu */}
+        {contextMenu && (
+          <div 
+            className="fixed inset-0 z-40"
+            onClick={() => setContextMenu(null)}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

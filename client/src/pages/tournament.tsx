@@ -172,28 +172,35 @@ export default function Tournament() {
 
   const createAthleteGroupMutation = useMutation({
     mutationFn: async (data: any) => {
-      // Create the athlete group first
-      const group = await api.createAthleteGroup(data.groupData);
-      
-      // Add red corner athlete if selected
-      if (data.redCornerAthleteId) {
-        await api.addAthleteToGroup({
-          groupId: group.id,
-          athleteId: data.redCornerAthleteId,
-          position: 'red'
-        });
+      try {
+        // Create the athlete group first
+        const group = await api.createAthleteGroup(data.groupData);
+        
+        // Add red corner athlete if selected
+        if (data.redCornerAthleteId && group.id) {
+          await api.addAthleteToGroup({
+            athleteGroupId: group.id,
+            groupId: group.id,
+            athleteId: data.redCornerAthleteId,
+            position: 'red'
+          });
+        }
+        
+        // Add blue corner athlete if selected
+        if (data.blueCornerAthleteId && group.id) {
+          await api.addAthleteToGroup({
+            athleteGroupId: group.id,
+            groupId: group.id,
+            athleteId: data.blueCornerAthleteId,
+            position: 'blue'
+          });
+        }
+        
+        return group;
+      } catch (error) {
+        console.error('Error creating athlete group:', error);
+        throw error;
       }
-      
-      // Add blue corner athlete if selected
-      if (data.blueCornerAthleteId) {
-        await api.addAthleteToGroup({
-          groupId: group.id,
-          athleteId: data.blueCornerAthleteId,
-          position: 'blue'
-        });
-      }
-      
-      return group;
     },
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Kelompok atlet berhasil dibuat dengan atlet sudut" });
@@ -786,10 +793,10 @@ export default function Tournament() {
                   </div>
                 </div>
 
-                {/* Corner Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Corner Selection - Horizontal Layout */}
+                <div className="flex gap-6">
                   {/* Red Corner */}
-                  <div className="border border-red-200 rounded-lg p-4">
+                  <div className="flex-1 border border-red-200 rounded-lg p-4">
                     <h4 className="font-medium text-red-600 mb-3">Sudut Merah</h4>
                     {selectedRedCorner ? (
                       <div className="bg-red-50 p-3 rounded-lg">
@@ -815,7 +822,7 @@ export default function Tournament() {
                   </div>
 
                   {/* Blue Corner */}
-                  <div className="border border-blue-200 rounded-lg p-4">
+                  <div className="flex-1 border border-blue-200 rounded-lg p-4">
                     <h4 className="font-medium text-blue-600 mb-3">Sudut Biru</h4>
                     {selectedBlueCorner ? (
                       <div className="bg-blue-50 p-3 rounded-lg">
@@ -841,45 +848,45 @@ export default function Tournament() {
                   </div>
                 </div>
 
-                {/* Athletes List */}
+                {/* Athletes List - Horizontal Layout */}
                 <div className="mt-6">
                   <h4 className="font-medium mb-3">Daftar Atlet</h4>
-                  <div className="max-h-80 overflow-y-auto border rounded-lg">
+                  <div className="max-h-60 overflow-y-auto border rounded-lg">
                     {filteredAthletes.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         Tidak ada atlet yang sesuai dengan kriteria pencarian
                       </div>
                     ) : (
-                      <div className="divide-y">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3">
                         {filteredAthletes.map(athlete => (
-                          <div key={athlete.id} className="p-3 hover:bg-gray-50">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <p className="font-medium">{athlete.name}</p>
-                                <p className="text-sm text-gray-600">
+                          <div key={athlete.id} className="border rounded-lg p-3 hover:bg-gray-50">
+                            <div className="space-y-2">
+                              <div>
+                                <p className="font-medium text-sm">{athlete.name}</p>
+                                <p className="text-xs text-gray-600">
                                   {athlete.dojang} • {athlete.belt} • {athlete.gender} • {athlete.weight}kg
                                 </p>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-1">
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  className="border-red-200 text-red-600 hover:bg-red-50"
+                                  className="flex-1 text-xs border-red-200 text-red-600 hover:bg-red-50"
                                   onClick={() => setSelectedRedCorner(athlete)}
                                   disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
                                 >
-                                  Sudut Merah
+                                  Merah
                                 </Button>
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                                  className="flex-1 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
                                   onClick={() => setSelectedBlueCorner(athlete)}
                                   disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
                                 >
-                                  Sudut Biru
+                                  Biru
                                 </Button>
                               </div>
                             </div>

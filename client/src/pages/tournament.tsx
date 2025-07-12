@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api } from "@/lib/api";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { 
   MainCategory, 
@@ -141,11 +141,10 @@ export default function Tournament() {
     },
   });
 
-  const addAthleteToGroupMutation = useMutation({
+  const addAthleteMutation = useMutation({
     mutationFn: api.addAthleteToGroup,
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Atlet berhasil ditambahkan ke kelompok" });
-      setShowAddAthlete(false);
       queryClient.invalidateQueries({ queryKey: ['group-athletes', selectedAthleteGroup?.id] });
     },
     onError: () => {
@@ -214,6 +213,7 @@ export default function Tournament() {
       subCategoryId: selectedSubCategory!.id,
       name: formData.get('name') as string,
       description: formData.get('description') as string,
+      matchNumber: parseInt(formData.get('matchNumber') as string) || 1,
     };
     createAthleteGroupMutation.mutate(data);
   };
@@ -462,6 +462,10 @@ export default function Tournament() {
                 <Input id="name" name="name" placeholder="Contoh: Kelompok A, Final" required />
               </div>
               <div>
+                <Label htmlFor="matchNumber">Nomor Partai</Label>
+                <Input id="matchNumber" name="matchNumber" type="number" placeholder="1" min="1" required />
+              </div>
+              <div>
                 <Label htmlFor="description">Deskripsi</Label>
                 <Textarea id="description" name="description" placeholder="Deskripsi kelompok..." />
               </div>
@@ -483,7 +487,12 @@ export default function Tournament() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">{group.description}</p>
+              <div className="space-y-2 mb-4">
+                <p className="text-gray-600">{group.description}</p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Partai #{group.matchNumber || 1}</Badge>
+                </div>
+              </div>
               <Button 
                 onClick={() => navigateToGroupAthletes(group)}
                 className="w-full"
@@ -497,12 +506,36 @@ export default function Tournament() {
     </div>
   );
 
-  const renderGroupAthletes = () => {
-    const redCorner = groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated);
-    const blueCorner = groupAthletes.find(ga => ga.position === 'blue' && !ga.isEliminated);
-    const queue = groupAthletes.filter(ga => ga.position === 'queue' && !ga.isEliminated);
-    const eliminated = groupAthletes.filter(ga => ga.isEliminated);
+  const [selectedCorner, setSelectedCorner] = useState<'red' | 'blue' | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
+  const redCorner = groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated);
+  const blueCorner = groupAthletes.find(ga => ga.position === 'blue' && !ga.isEliminated);
+  const queue = groupAthletes.filter(ga => ga.position === 'queue' && !ga.isEliminated);
+  const eliminated = groupAthletes.filter(ga => ga.isEliminated);
+
+  // Filter athletes for selection
+  const availableAthletes = allAthletes.filter(athlete => 
+    !groupAthletes.find(ga => ga.athleteId === athlete.id) &&
+    athlete.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleAthleteSelect = (athleteId: number) => {
+    if (!selectedCorner) return;
+    
+    const position = selectedCorner;
+    addAthleteMutation.mutate({
+      groupId: selectedAthleteGroup!.id,
+      athleteId,
+      position,
+      queueOrder: 1
+    });
+    
+    setSelectedCorner(null);
+    setSearchTerm('');
+  };
+
+  const renderGroupAthletes = () => {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -511,176 +544,234 @@ export default function Tournament() {
             Kembali
           </Button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Manajemen Pertandingan - {selectedAthleteGroup?.name}</h2>
-            <p className="text-gray-600">Kelola atlet dalam pertandingan, tentukan pemenang, dan atur antrian.</p>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Partai #{selectedAthleteGroup?.matchNumber} - {selectedAthleteGroup?.name}
+            </h2>
+            <p className="text-gray-600">Klik sudut merah atau biru untuk menambah atlet, lalu tentukan pemenang.</p>
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Dialog open={showAddAthlete} onOpenChange={setShowAddAthlete}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Tambah Atlet
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tambah Atlet ke Kelompok</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleAddAthlete} className="space-y-4">
-                <div>
-                  <Label htmlFor="athleteId">Pilih Atlet</Label>
-                  <Select name="athleteId" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih atlet..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allAthletes.map((athlete) => (
-                        <SelectItem key={athlete.id} value={athlete.id.toString()}>
-                          {athlete.name} - {athlete.dojang}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="position">Posisi</Label>
-                  <Select name="position" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih posisi..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="red">Sudut Merah</SelectItem>
-                      <SelectItem value="blue">Sudut Biru</SelectItem>
-                      <SelectItem value="queue">Antrian</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="queueOrder">Urutan Antrian</Label>
-                  <Input id="queueOrder" name="queueOrder" type="number" placeholder="1" min="1" />
-                </div>
-                <Button type="submit" className="w-full">
-                  Tambah Atlet
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Match Arena */}
+        {/* Match Interface */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Red Corner */}
-          <Card className="border-red-200 bg-red-50">
+          <Card 
+            className={`border-2 transition-all cursor-pointer ${
+              selectedCorner === 'red' 
+                ? 'border-red-500 bg-red-50 shadow-lg' 
+                : redCorner 
+                  ? 'border-red-200 bg-red-50' 
+                  : 'border-red-200 bg-red-50 hover:border-red-300'
+            }`}
+            onClick={() => !redCorner && setSelectedCorner('red')}
+          >
             <CardHeader>
-              <CardTitle className="text-red-600">Sudut Merah</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {redCorner ? (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold">{allAthletes.find(a => a.id === redCorner.athleteId)?.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {allAthletes.find(a => a.id === redCorner.athleteId)?.dojang}
-                    </p>
-                  </div>
+              <CardTitle className="text-red-600 flex items-center justify-between">
+                <span>Sudut Merah</span>
+                {redCorner && (
                   <Button
-                    onClick={() => declareWinnerMutation.mutate({ 
-                      athleteId: redCorner.athleteId, 
-                      groupId: selectedAthleteGroup!.id 
-                    })}
-                    className="w-full bg-red-600 hover:bg-red-700"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      declareWinnerMutation.mutate({ 
+                        athleteId: redCorner.athleteId, 
+                        groupId: selectedAthleteGroup!.id 
+                      });
+                    }}
+                    className="bg-red-600 hover:bg-red-700"
                     disabled={declareWinnerMutation.isPending}
                   >
                     Menang
                   </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {redCorner ? (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">
+                    {allAthletes.find(a => a.id === redCorner.athleteId)?.name}
+                  </h3>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === redCorner.athleteId)?.dojang}</p>
+                    <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === redCorner.athleteId)?.belt}</p>
+                    <p><strong>BB:</strong> {allAthletes.find(a => a.id === redCorner.athleteId)?.weight} kg</p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-gray-500">Belum ada atlet</p>
+                <div className="text-center py-8">
+                  <Plus className="h-12 w-12 text-red-400 mx-auto mb-2" />
+                  <p className="text-red-600 font-medium">Klik untuk menambah atlet</p>
+                </div>
               )}
             </CardContent>
           </Card>
 
           {/* Blue Corner */}
-          <Card className="border-blue-200 bg-blue-50">
+          <Card 
+            className={`border-2 transition-all cursor-pointer ${
+              selectedCorner === 'blue' 
+                ? 'border-blue-500 bg-blue-50 shadow-lg' 
+                : blueCorner 
+                  ? 'border-blue-200 bg-blue-50' 
+                  : 'border-blue-200 bg-blue-50 hover:border-blue-300'
+            }`}
+            onClick={() => !blueCorner && setSelectedCorner('blue')}
+          >
             <CardHeader>
-              <CardTitle className="text-blue-600">Sudut Biru</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {blueCorner ? (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold">{allAthletes.find(a => a.id === blueCorner.athleteId)?.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {allAthletes.find(a => a.id === blueCorner.athleteId)?.dojang}
-                    </p>
-                  </div>
+              <CardTitle className="text-blue-600 flex items-center justify-between">
+                <span>Sudut Biru</span>
+                {blueCorner && (
                   <Button
-                    onClick={() => declareWinnerMutation.mutate({ 
-                      athleteId: blueCorner.athleteId, 
-                      groupId: selectedAthleteGroup!.id 
-                    })}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      declareWinnerMutation.mutate({ 
+                        athleteId: blueCorner.athleteId, 
+                        groupId: selectedAthleteGroup!.id 
+                      });
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
                     disabled={declareWinnerMutation.isPending}
                   >
                     Menang
                   </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {blueCorner ? (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">
+                    {allAthletes.find(a => a.id === blueCorner.athleteId)?.name}
+                  </h3>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === blueCorner.athleteId)?.dojang}</p>
+                    <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === blueCorner.athleteId)?.belt}</p>
+                    <p><strong>BB:</strong> {allAthletes.find(a => a.id === blueCorner.athleteId)?.weight} kg</p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-gray-500">Belum ada atlet</p>
+                <div className="text-center py-8">
+                  <Plus className="h-12 w-12 text-blue-400 mx-auto mb-2" />
+                  <p className="text-blue-600 font-medium">Klik untuk menambah atlet</p>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Queue */}
+        {/* Athlete Selection Modal */}
+        <Dialog open={!!selectedCorner} onOpenChange={() => setSelectedCorner(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                Pilih Atlet untuk Sudut {selectedCorner === 'red' ? 'Merah' : 'Biru'}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Cari Atlet</Label>
+                <Input
+                  placeholder="Ketik nama atlet..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto space-y-2">
+                {availableAthletes.length > 0 ? (
+                  availableAthletes.map((athlete) => (
+                    <Card 
+                      key={athlete.id}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleAthleteSelect(athlete.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h4 className="font-semibold">{athlete.name}</h4>
+                            <p className="text-sm text-gray-600">
+                              {athlete.dojang} • {athlete.belt} • {athlete.weight}kg
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {athlete.category}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-4">
+                    {searchTerm ? 'Tidak ada atlet yang cocok' : 'Tidak ada atlet tersedia'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Queue Section */}
         {queue.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Antrian</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Antrian Atlet
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {queue.map((queueAthlete) => (
-                  <div key={queueAthlete.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                    <div>
-                      <span className="font-medium">
-                        {allAthletes.find(a => a.id === queueAthlete.athleteId)?.name}
-                      </span>
-                      <span className="text-sm text-gray-600 ml-2">
-                        - {allAthletes.find(a => a.id === queueAthlete.athleteId)?.dojang}
-                      </span>
-                    </div>
-                    <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {queue.map((queueAthlete) => {
+                  const athlete = allAthletes.find(a => a.id === queueAthlete.athleteId);
+                  return (
+                    <Card key={queueAthlete.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold">{athlete?.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
+                          </p>
+                        </div>
+                        <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Eliminated */}
+        {/* Eliminated Section */}
         {eliminated.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Tersingkir</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <X className="h-5 w-5 text-red-500" />
+                Atlet Tersingkir
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {eliminated.map((eliminatedAthlete) => (
-                  <div key={eliminatedAthlete.id} className="flex items-center justify-between p-3 bg-gray-100 rounded opacity-60">
-                    <div>
-                      <span className="font-medium">
-                        {allAthletes.find(a => a.id === eliminatedAthlete.athleteId)?.name}
-                      </span>
-                      <span className="text-sm text-gray-600 ml-2">
-                        - {allAthletes.find(a => a.id === eliminatedAthlete.athleteId)?.dojang}
-                      </span>
-                    </div>
-                    <Badge variant="destructive">Tersingkir</Badge>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {eliminated.map((eliminatedAthlete) => {
+                  const athlete = allAthletes.find(a => a.id === eliminatedAthlete.athleteId);
+                  return (
+                    <Card key={eliminatedAthlete.id} className="p-4 opacity-60 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold line-through">{athlete?.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
+                          </p>
+                        </div>
+                        <Badge variant="destructive">Tersingkir</Badge>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

@@ -832,6 +832,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const athleteGroup = await storage.createAthleteGroup(validatedData);
       broadcast({ type: 'athlete_group_created', data: athleteGroup });
       res.json(athleteGroup);
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('createAthleteGroup', {
+        id: athleteGroup.id.toString(),
+        subCategoryId: athleteGroup.subCategoryId.toString(),
+        name: athleteGroup.name,
+        description: athleteGroup.description || '',
+        matchNumber: athleteGroup.matchNumber?.toString() || '1'
+      }).catch(error => {
+        console.error('Failed to sync athlete group to Google Sheets:', error);
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });

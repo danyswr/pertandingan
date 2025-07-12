@@ -40,6 +40,8 @@ export const athleteGroups = pgTable("athlete_groups", {
   id: serial("id").primaryKey(),
   subCategoryId: integer("sub_category_id").references(() => subCategories.id),
   name: text("name").notNull(), // e.g., "Grup A", "Grup B"
+  description: text("description"),
+  matchNumber: integer("match_number").default(1),
   minAthletes: integer("min_athletes").default(2),
   maxAthletes: integer("max_athletes").default(8),
   currentCount: integer("current_count").default(0),

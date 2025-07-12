@@ -656,7 +656,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Main Categories (Kategori_utama)
   app.get('/api/tournament/main-categories', async (req, res) => {
     try {
-      // First try to sync from Google Sheets to get latest data
+      // Clear cache and fetch fresh data from Google Sheets
+      dataCache.clear();
+      
+      // Always sync from Google Sheets to get the latest data
       try {
         await storage.syncMainCategoriesFromGoogleSheets();
       } catch (syncError) {
@@ -674,6 +677,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertMainCategorySchema.parse(req.body);
       const category = await storage.createMainCategory(validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'main_category_created', data: category });
       res.json(category);
       
@@ -698,6 +705,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       const validatedData = insertMainCategorySchema.partial().parse(req.body);
       const category = await storage.updateMainCategory(id, validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'main_category_updated', data: category });
       res.json(category);
       
@@ -721,6 +732,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteMainCategory(id);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'main_category_deleted', data: { id } });
       res.json({ success: true });
       
@@ -740,7 +755,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const mainCategoryId = parseInt(req.params.id);
       
-      // First try to sync from Google Sheets to get latest data
+      // Clear cache and fetch fresh data from Google Sheets
+      dataCache.clear();
+      
+      // Always sync from Google Sheets to get the latest data
       try {
         await storage.syncSubCategoriesFromGoogleSheets(mainCategoryId);
       } catch (syncError) {
@@ -758,6 +776,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertSubCategorySchema.parse(req.body);
       const subCategory = await storage.createSubCategory(validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'sub_category_created', data: subCategory });
       res.json(subCategory);
       
@@ -784,6 +806,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       const validatedData = insertSubCategorySchema.partial().parse(req.body);
       const subCategory = await storage.updateSubCategory(id, validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'sub_category_updated', data: subCategory });
       res.json(subCategory);
       
@@ -809,6 +835,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteSubCategory(id);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'sub_category_deleted', data: { id } });
       res.json({ success: true });
       

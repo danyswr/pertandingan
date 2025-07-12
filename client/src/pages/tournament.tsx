@@ -127,7 +127,9 @@ export default function Tournament() {
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Sub kategori berhasil dibuat" });
       setShowCreateSubCategory(false);
-      queryClient.invalidateQueries({ queryKey: ['sub-categories', selectedMainCategory?.id] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['main-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-categories'] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal membuat sub kategori", variant: "destructive" });
@@ -213,7 +215,9 @@ export default function Tournament() {
       toast({ title: "Berhasil", description: "Sub kategori berhasil diperbarui" });
       setShowEditSubCategory(false);
       setEditingSubCategory(null);
-      queryClient.invalidateQueries({ queryKey: ['sub-categories', selectedMainCategory?.id] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['main-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-categories'] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal memperbarui sub kategori", variant: "destructive" });
@@ -224,7 +228,9 @@ export default function Tournament() {
     mutationFn: api.deleteSubCategory,
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Sub kategori berhasil dihapus" });
-      queryClient.invalidateQueries({ queryKey: ['sub-categories', selectedMainCategory?.id] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['main-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['sub-categories'] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal menghapus sub kategori", variant: "destructive" });

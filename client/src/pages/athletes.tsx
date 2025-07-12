@@ -132,7 +132,7 @@ export default function Athletes() {
             'januari': 0, 'februari': 1, 'maret': 2, 'april': 3, 'mei': 4, 'juni': 5,
             'juli': 6, 'agustus': 7, 'september': 8, 'oktober': 9, 'november': 10, 'desember': 11,
             'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
-            'july': 6, 'august': 7, 'september': 8, 'october': 9, 'december': 11
+            'july': 6, 'august': 7, 'october': 9, 'november': 10, 'december': 11
           };
           
           const month = monthMap[monthName.toLowerCase()];

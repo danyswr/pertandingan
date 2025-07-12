@@ -23,7 +23,6 @@ export const athletes = pgTable("athletes", {
 export const mainCategories = pgTable("main_categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(), // e.g., "Kyorugi", "Poomsae"
-  description: text("description"),
   isActive: boolean("is_active").default(true)
 });
 

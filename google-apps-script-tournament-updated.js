@@ -236,6 +236,66 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // Handle Delete Main Category
+    if (params.action === 'deleteMainCategory') {
+      const sheet = spreadsheet.getSheetByName('Kategori_Utama');
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Sheet not found'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const categoryId = parseInt(params.id);
+      const data = sheet.getDataRange().getValues();
+      
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] == categoryId) {
+          sheet.deleteRow(i + 1);
+          console.log('Main category deleted:', categoryId);
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true, 
+              message: 'Main category deleted successfully'
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({success: false, message: 'Category not found'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Handle Update Main Category
+    if (params.action === 'updateMainCategory') {
+      const sheet = spreadsheet.getSheetByName('Kategori_Utama');
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Sheet not found'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const categoryId = parseInt(params.id);
+      const data = sheet.getDataRange().getValues();
+      
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] == categoryId) {
+          sheet.getRange(i + 1, 2).setValue(params.name);
+          console.log('Main category updated:', categoryId, params.name);
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true, 
+              message: 'Main category updated successfully'
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({success: false, message: 'Category not found'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     return ContentService
       .createTextOutput(JSON.stringify({success: false, message: 'Action tidak dikenal atau parameter tidak lengkap'}))
       .setMimeType(ContentService.MimeType.JSON);

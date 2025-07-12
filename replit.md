@@ -112,6 +112,17 @@ The system uses a relational database design with the following core entities:
 - **CRUD Operations**: Full create, read, update, delete functionality for all tournament levels
 - **Attendance Fix**: Resolved athlete sync issues for attendance updates with proper Google Sheets fallback
 
+### 2025-07-12 - Migration from Replit Agent & Google Sheets Integration Fix
+- **Migration Completed**: Successfully migrated project from Replit Agent to standard Replit environment
+- **Google Sheets Tournament Support**: Added comprehensive tournament data sync to Google Sheets
+  - Main Categories (Kategori_Utama): id_kategori, nama_kategori
+  - Sub Categories (SubKategori): id_subkategori, id_kategori_utama, Nomor, judul_subkategori
+  - Athlete Groups (Kelompok_Atlet): id_kel, id_SubKelompok, Judul, Nomor, Keterangan
+  - Group Athletes (daftar_kelompok): id_daftarKelompok, id_kelompokAtlet, nama_atlet, etc.
+- **UI Simplification**: Removed description field from main categories for cleaner interface
+- **Enhanced Google Apps Script**: Added CRUD operations for tournament hierarchy (create, read, update, delete)
+- **Real-time Sync**: Tournament data automatically syncs between web application and Google Sheets
+
 ### 2025-07-12 - Migration from Replit Agent & Performance Optimization
 - **Migration Completed**: Successfully migrated project from Replit Agent to standard Replit environment
 - **Performance Optimization**: Attendance updates now respond in 1ms (previously 2+ seconds) with asynchronous Google Sheets sync

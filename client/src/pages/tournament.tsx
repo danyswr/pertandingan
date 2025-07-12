@@ -171,7 +171,6 @@ export default function Tournament() {
     const formData = new FormData(e.currentTarget);
     const data: InsertMainCategory = {
       name: formData.get('name') as string,
-      description: formData.get('description') as string,
     };
     createMainCategoryMutation.mutate(data);
   };
@@ -182,7 +181,6 @@ export default function Tournament() {
     const formData = new FormData(e.currentTarget);
     const data: Partial<InsertMainCategory> = {
       name: formData.get('name') as string,
-      description: formData.get('description') as string,
     };
     updateMainCategoryMutation.mutate({ id: editingCategory.id, data });
   };
@@ -292,10 +290,6 @@ export default function Tournament() {
                 <Label htmlFor="name">Nama Kategori</Label>
                 <Input id="name" name="name" placeholder="Contoh: Kyorugi, Poomsae" required />
               </div>
-              <div>
-                <Label htmlFor="description">Deskripsi</Label>
-                <Textarea id="description" name="description" placeholder="Deskripsi kategori..." />
-              </div>
               <Button type="submit" className="w-full">
                 Buat Kategori
               </Button>
@@ -318,15 +312,6 @@ export default function Tournament() {
                   placeholder="Contoh: Kyorugi, Poomsae" 
                   defaultValue={editingCategory?.name || ''} 
                   required 
-                />
-              </div>
-              <div>
-                <Label htmlFor="editDescription">Deskripsi</Label>
-                <Textarea 
-                  id="editDescription" 
-                  name="description" 
-                  placeholder="Deskripsi kategori..." 
-                  defaultValue={editingCategory?.description || ''} 
                 />
               </div>
               <Button type="submit" className="w-full">
@@ -365,7 +350,6 @@ export default function Tournament() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">{category.description}</p>
               <Button 
                 onClick={() => navigateToSubCategories(category)}
                 className="w-full"

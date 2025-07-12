@@ -270,35 +270,27 @@ export default function Athletes() {
   return (
     <div className="space-y-6">
       <Header 
-        title={selectedCompetition ? `${selectedCompetition.nama}` : "Manajemen Atlet"} 
-        subtitle={selectedCompetition ? `${filteredAthletes.length} atlet • Sistem Manajemen Turnamen` : "Pilih kejuaraan untuk mengelola data atlet"}
+        title="Manajemen Atlet" 
+        subtitle={`${filteredAthletes.length} atlet • Data dari Spreadsheet Management`}
         onRefresh={refetchManagementAthletes}
       />
 
       {/* Main Actions */}
       <div className="flex gap-4">
-        {selectedCompetition ? (
-          <>
-            <Button variant="outline" onClick={handleChangeCompetition}>
-              <Calendar className="w-4 h-4 mr-2" />
-              Ganti Kejuaraan
-            </Button>
-            <Button onClick={() => setShowImportDialog(true)}>
-              <Download className="w-4 h-4 mr-2" />
-              Import Atlet Baru
-            </Button>
-          </>
-        ) : (
-          <Button onClick={() => setShowCompetitionDialog(true)} className="w-full">
-            <Calendar className="w-4 h-4 mr-2" />
-            Pilih Kejuaraan
+        <Button variant="outline" onClick={() => setShowCompetitionDialog(true)}>
+          <Calendar className="w-4 h-4 mr-2" />
+          Pilih Kejuaraan untuk Import
+        </Button>
+        {selectedCompetition && (
+          <Button onClick={() => setShowImportDialog(true)}>
+            <Download className="w-4 h-4 mr-2" />
+            Import Atlet Baru
           </Button>
         )}
       </div>
 
-      {selectedCompetition && (
-        <>
-          {/* Filter Section */}
+      {/* Always show athlete data */}
+      {/* Filter Section */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -545,8 +537,6 @@ export default function Athletes() {
               )}
             </CardContent>
           </Card>
-        </>
-      )}
 
       {/* Dialog untuk memilih kejuaraan */}
       <Dialog open={showCompetitionDialog} onOpenChange={setShowCompetitionDialog}>

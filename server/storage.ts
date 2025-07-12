@@ -935,21 +935,67 @@ export class MemStorage implements IStorage {
     try {
       console.log('Loading main categories from Google Sheets...');
       
-      // Create default main categories since Google Sheets URL is not working
-      // Based on the user's screenshot, there should be kyorugi category
-      this.mainCategories.clear();
+      // Use the tournament management Google Apps Script URL
+      const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
       
-      const defaultCategories = [
-        { id: 1, name: 'kyorugi' }
-      ];
-      
-      defaultCategories.forEach(cat => {
-        this.mainCategories.set(cat.id, cat);
-      });
-      
-      this.currentMainCategoryId = 2;
-      
-      console.log(`Loaded ${this.mainCategories.size} main categories (default data)`);
+      try {
+        // Fetch main categories from Google Sheets
+        const url = new URL(managementUrl);
+        url.searchParams.append('action', 'getMainCategories');
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          redirect: 'follow'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data && Array.isArray(result.data)) {
+          this.mainCategories.clear();
+          
+          // Process Google Sheets data (skip header row if present)
+          const dataRows = result.data.slice(1); // Skip header row
+          
+          dataRows.forEach((row: any[], index: number) => {
+            if (row && row.length >= 2 && row[0] && row[1]) {
+              const category: MainCategory = {
+                id: parseInt(row[0]) || (index + 1),
+                name: row[1].toString().trim()
+              };
+              this.mainCategories.set(category.id, category);
+            }
+          });
+          
+          // Set next ID
+          const maxId = Math.max(...Array.from(this.mainCategories.keys()), 0);
+          this.currentMainCategoryId = maxId + 1;
+          
+          console.log(`Loaded ${this.mainCategories.size} main categories from Google Sheets`);
+        } else {
+          throw new Error('Invalid response format from Google Sheets');
+        }
+        
+      } catch (fetchError) {
+        console.warn('Failed to fetch from Google Sheets, using fallback data:', fetchError);
+        
+        // Fallback to default data only if Google Sheets fails
+        this.mainCategories.clear();
+        const defaultCategories = [{ id: 1, name: 'kyorugi' }];
+        defaultCategories.forEach(cat => {
+          this.mainCategories.set(cat.id, cat);
+        });
+        this.currentMainCategoryId = 2;
+        
+        console.log(`Loaded ${this.mainCategories.size} main categories (fallback data)`);
+      }
       
     } catch (error) {
       console.error('Error loading main categories:', error);

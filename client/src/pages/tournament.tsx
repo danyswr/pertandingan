@@ -155,32 +155,26 @@ export default function Tournament() {
     setContextMenu(null);
   };
 
-  // Handle athlete card click based on active selection
+  // Handle athlete card click with automatic position filling
   const handleAthleteCardClick = (athlete: Athlete) => {
-    if (!activeSelection) return;
-
-    if (activeSelection === 'red') {
-      setSelectedRedCorner(athlete);
-      if (!groupGender) {
-        setGroupGender(athlete.gender);
-        setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
-      }
-      setActiveSelection(null); // Reset selection after placing athlete
-    } else if (activeSelection === 'blue') {
-      setSelectedBlueCorner(athlete);
-      if (!groupGender) {
-        setGroupGender(athlete.gender);
-        setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
-      }
-      setActiveSelection(null); // Reset selection after placing athlete
-    } else if (activeSelection === 'queue') {
-      setSelectedQueue(prev => [...prev, athlete]);
-      if (!groupGender) {
-        setGroupGender(athlete.gender);
-        setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
-      }
-      // Don't reset selection for queue as users might want to add multiple athletes
+    // Set gender filter on first athlete selection
+    if (!groupGender) {
+      setGroupGender(athlete.gender);
+      setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
     }
+
+    // Auto-fill positions: red corner first, then blue corner, then queue
+    if (!selectedRedCorner) {
+      setSelectedRedCorner(athlete);
+    } else if (!selectedBlueCorner) {
+      setSelectedBlueCorner(athlete);
+    } else {
+      // Both corners filled, add to queue
+      setSelectedQueue(prev => [...prev, athlete]);
+    }
+    
+    // Clear active selection since we're using auto-fill
+    setActiveSelection(null);
   };
 
   const removeAthleteFromQueue = (athleteId: number) => {
@@ -225,6 +219,14 @@ export default function Tournament() {
       setSelectedQueue(prev => [...prev, athlete]);
     }
     
+    setContextMenu(null);
+  };
+
+  // Switch red and blue corners
+  const switchRedBlueCorners = () => {
+    const tempRed = selectedRedCorner;
+    setSelectedRedCorner(selectedBlueCorner);
+    setSelectedBlueCorner(tempRed);
     setContextMenu(null);
   };
 
@@ -919,11 +921,22 @@ export default function Tournament() {
                         className={cn(
                           "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'red' 
-                            ? "border-red-500 bg-red-100 shadow-lg ring-2 ring-red-200 animate-pulse" 
+                            ? "border-red-500 bg-red-100 shadow-lg ring-2 ring-red-200 scale-105" 
                             : "border-red-200 bg-red-50/50 hover:bg-red-100/50",
                           selectedRedCorner && "bg-red-100 scale-105 border-red-400 shadow-md ring-2 ring-red-300"
                         )}
                         onClick={() => setActiveSelection(activeSelection === 'red' ? null : 'red')}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (selectedRedCorner && selectedBlueCorner) {
+                            setContextMenu({
+                              athlete: selectedRedCorner,
+                              x: e.clientX,
+                              y: e.clientY,
+                              currentPosition: 'red'
+                            });
+                          }
+                        }}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <h4 className={cn(
@@ -971,11 +984,22 @@ export default function Tournament() {
                         className={cn(
                           "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'blue' 
-                            ? "border-blue-500 bg-blue-100 shadow-lg ring-2 ring-blue-200 animate-pulse" 
+                            ? "border-blue-500 bg-blue-100 shadow-lg ring-2 ring-blue-200 scale-105" 
                             : "border-blue-200 bg-blue-50/50 hover:bg-blue-100/50",
                           selectedBlueCorner && "bg-blue-100 scale-105 border-blue-400 shadow-md ring-2 ring-blue-300"
                         )}
                         onClick={() => setActiveSelection(activeSelection === 'blue' ? null : 'blue')}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (selectedRedCorner && selectedBlueCorner) {
+                            setContextMenu({
+                              athlete: selectedBlueCorner,
+                              x: e.clientX,
+                              y: e.clientY,
+                              currentPosition: 'blue'
+                            });
+                          }
+                        }}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <h4 className={cn(
@@ -1023,7 +1047,7 @@ export default function Tournament() {
                         className={cn(
                           "border rounded-lg p-4 cursor-pointer transition-all duration-300",
                           activeSelection === 'queue' 
-                            ? "border-gray-500 bg-gray-100 shadow-lg ring-2 ring-gray-200 animate-pulse" 
+                            ? "border-gray-500 bg-gray-100 shadow-lg ring-2 ring-gray-200 scale-105" 
                             : "border-gray-200 bg-gray-50/50 hover:bg-gray-100/50",
                           selectedQueue.length > 0 && "bg-gray-100 scale-105 border-gray-400 shadow-md ring-2 ring-gray-300"
                         )}
@@ -1283,24 +1307,26 @@ export default function Tournament() {
                           </div>
                         ) : (
                           <div className="space-y-2 p-3">
-                            {!activeSelection && (
-                              <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border-2 border-dashed">
-                                <p className="text-sm">Pilih posisi terlebih dahulu (Sudut Merah, Sudut Biru, atau Antrian)</p>
-                              </div>
-                            )}
+                            <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border-2 border-dashed">
+                              <p className="text-sm">
+                                {!selectedRedCorner && !selectedBlueCorner 
+                                  ? "Klik atlet untuk mengisi sudut merah terlebih dahulu" 
+                                  : !selectedBlueCorner
+                                  ? "Klik atlet untuk mengisi sudut biru"
+                                  : "Klik atlet untuk menambah ke antrian"}
+                              </p>
+                            </div>
                             {filteredAthletes.map(athlete => (
                               <div 
                                 key={athlete.id} 
                                 className={cn(
-                                  "border rounded-lg p-3 transition-all duration-200",
-                                  activeSelection 
-                                    ? "cursor-pointer hover:bg-gray-50 hover:shadow-md hover:border-gray-400" 
-                                    : "opacity-50 cursor-not-allowed",
-                                  activeSelection === 'red' && "hover:bg-red-50 hover:border-red-300",
-                                  activeSelection === 'blue' && "hover:bg-blue-50 hover:border-blue-300",
-                                  activeSelection === 'queue' && "hover:bg-gray-100 hover:border-gray-400"
+                                  "border rounded-lg p-3 transition-all duration-200 cursor-pointer",
+                                  "hover:bg-gray-50 hover:shadow-md hover:border-gray-400",
+                                  !selectedRedCorner && "hover:bg-red-50 hover:border-red-300",
+                                  selectedRedCorner && !selectedBlueCorner && "hover:bg-blue-50 hover:border-blue-300",
+                                  selectedRedCorner && selectedBlueCorner && "hover:bg-gray-100 hover:border-gray-400"
                                 )}
-                                onClick={() => activeSelection && handleAthleteCardClick(athlete)}
+                                onClick={() => handleAthleteCardClick(athlete)}
                               >
                                 <div className="space-y-2">
                                   <div>
@@ -1311,11 +1337,9 @@ export default function Tournament() {
                                     <p className="text-xs text-gray-500">
                                       Umur: {athlete.age} • Tinggi: {athlete.height}cm
                                     </p>
-                                    {activeSelection && (
-                                      <p className="text-xs text-gray-400 mt-1">
-                                        Klik untuk {activeSelection === 'red' ? 'menempatkan di sudut merah' : activeSelection === 'blue' ? 'menempatkan di sudut biru' : 'menambah ke antrian'}
-                                      </p>
-                                    )}
+                                    <p className="text-xs text-gray-400 mt-1">
+                                      Klik untuk {!selectedRedCorner ? 'sudut merah' : !selectedBlueCorner ? 'sudut biru' : 'antrian'}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
@@ -1339,6 +1363,15 @@ export default function Tournament() {
                 <div className="px-3 py-1 text-xs text-gray-500 border-b mb-1">
                   {contextMenu.athlete.name}
                 </div>
+                {/* Switch red and blue corners */}
+                {(contextMenu.currentPosition === 'red' || contextMenu.currentPosition === 'blue') && selectedRedCorner && selectedBlueCorner && (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50 text-purple-600"
+                    onClick={switchRedBlueCorners}
+                  >
+                    Tukar Sudut Merah & Biru
+                  </button>
+                )}
                 {contextMenu.currentPosition !== 'red' && !selectedRedCorner && (
                   <button
                     className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600"

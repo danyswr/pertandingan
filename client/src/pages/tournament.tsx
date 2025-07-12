@@ -523,9 +523,9 @@ export default function Tournament() {
     .filter(athlete => 
       !groupAthletes.find(ga => ga.athleteId === athlete.id) &&
       athlete.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (filterBelt === '' || athlete.belt === filterBelt) &&
-      (filterGender === '' || athlete.gender === filterGender) &&
-      (filterDojang === '' || athlete.dojang === filterDojang) &&
+      (filterBelt === '' || filterBelt === 'unknown' || athlete.belt === filterBelt) &&
+      (filterGender === '' || filterGender === 'unknown' || athlete.gender === filterGender) &&
+      (filterDojang === '' || filterDojang === 'unknown' || athlete.dojang === filterDojang) &&
       athlete.isPresent // Only show present athletes
     )
     .sort((a, b) => {
@@ -541,9 +541,9 @@ export default function Tournament() {
     });
 
   // Get unique values for filter options
-  const uniqueBelts = [...new Set(allAthletes.map(a => a.belt))].filter(Boolean);
-  const uniqueGenders = [...new Set(allAthletes.map(a => a.gender))].filter(Boolean);
-  const uniqueDojangs = [...new Set(allAthletes.map(a => a.dojang))].filter(Boolean);
+  const uniqueBelts = [...new Set(allAthletes.map(a => a.belt))].filter(belt => belt && belt.trim());
+  const uniqueGenders = [...new Set(allAthletes.map(a => a.gender))].filter(gender => gender && gender.trim());
+  const uniqueDojangs = [...new Set(allAthletes.map(a => a.dojang))].filter(dojang => dojang && dojang.trim());
 
   const handleAthleteSelect = (athleteId: number) => {
     if (!selectedCorner) return;
@@ -727,7 +727,7 @@ export default function Tournament() {
                     <SelectContent>
                       <SelectItem value="">Semua Sabuk</SelectItem>
                       {uniqueBelts.map(belt => (
-                        <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                        <SelectItem key={belt} value={belt || 'unknown'}>{belt || 'Tidak diketahui'}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -742,7 +742,7 @@ export default function Tournament() {
                     <SelectContent>
                       <SelectItem value="">Semua Gender</SelectItem>
                       {uniqueGenders.map(gender => (
-                        <SelectItem key={gender} value={gender}>{gender}</SelectItem>
+                        <SelectItem key={gender} value={gender || 'unknown'}>{gender || 'Tidak diketahui'}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -759,7 +759,7 @@ export default function Tournament() {
                     <SelectContent>
                       <SelectItem value="">Semua Dojang</SelectItem>
                       {uniqueDojangs.map(dojang => (
-                        <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                        <SelectItem key={dojang} value={dojang || 'unknown'}>{dojang || 'Tidak diketahui'}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

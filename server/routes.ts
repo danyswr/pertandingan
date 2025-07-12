@@ -745,6 +745,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subCategory = await storage.createSubCategory(validatedData);
       broadcast({ type: 'sub_category_created', data: subCategory });
       res.json(subCategory);
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('createSubCategory', {
+        id: subCategory.id.toString(),
+        mainCategoryId: subCategory.mainCategoryId.toString(),
+        order: subCategory.order.toString(),
+        name: subCategory.name
+      }).catch(error => {
+        console.error('Failed to sync sub category to Google Sheets:', error);
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
@@ -761,6 +771,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subCategory = await storage.updateSubCategory(id, validatedData);
       broadcast({ type: 'sub_category_updated', data: subCategory });
       res.json(subCategory);
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('updateSubCategory', {
+        id: subCategory.id.toString(),
+        mainCategoryId: subCategory.mainCategoryId.toString(),
+        order: subCategory.order.toString(),
+        name: subCategory.name
+      }).catch(error => {
+        console.error('Failed to sync sub category update to Google Sheets:', error);
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
@@ -776,6 +796,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteSubCategory(id);
       broadcast({ type: 'sub_category_deleted', data: { id } });
       res.json({ success: true });
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('deleteSubCategory', {
+        id: id.toString()
+      }).catch(error => {
+        console.error('Failed to sync sub category deletion to Google Sheets:', error);
+      });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete sub category' });
     }

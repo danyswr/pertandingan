@@ -121,6 +121,70 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // Handle Update Sub Category
+    if (params.action === 'updateSubCategory') {
+      const sheet = spreadsheet.getSheetByName('SubKategori');
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'SubKategori sheet not found'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const subCategoryId = parseInt(params.id);
+      const data = sheet.getDataRange().getValues();
+      
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] == subCategoryId) {
+          sheet.getRange(i + 1, 2).setValue(parseInt(params.mainCategoryId));
+          sheet.getRange(i + 1, 3).setValue(parseInt(params.order));
+          sheet.getRange(i + 1, 4).setValue(params.name);
+          console.log('Sub category updated:', subCategoryId, params.name);
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true, 
+              message: 'Sub category updated successfully',
+              id: subCategoryId,
+              name: params.name
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({success: false, message: 'Sub category not found'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Handle Delete Sub Category
+    if (params.action === 'deleteSubCategory') {
+      const sheet = spreadsheet.getSheetByName('SubKategori');
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'SubKategori sheet not found'}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const subCategoryId = parseInt(params.id);
+      const data = sheet.getDataRange().getValues();
+      
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] == subCategoryId) {
+          sheet.deleteRow(i + 1);
+          console.log('Sub category deleted:', subCategoryId);
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true, 
+              message: 'Sub category deleted successfully'
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({success: false, message: 'Sub category not found'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     // Handle Athlete Group actions
     if (params.action === 'createAthleteGroup') {
       let sheet = spreadsheet.getSheetByName('Kelompok_Atlet');

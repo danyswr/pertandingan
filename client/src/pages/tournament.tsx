@@ -202,7 +202,7 @@ export default function Tournament() {
     const data: InsertSubCategory = {
       mainCategoryId: selectedMainCategory!.id,
       name: formData.get('name') as string,
-      orderNumber: parseInt(formData.get('orderNumber') as string) || 1,
+      order: parseInt(formData.get('order') as string) || 1,
     };
     createSubCategoryMutation.mutate(data);
   };
@@ -394,8 +394,8 @@ export default function Tournament() {
                 <Input id="name" name="name" placeholder="Contoh: Remaja, Dewasa" required />
               </div>
               <div>
-                <Label htmlFor="orderNumber">Nomor Urut</Label>
-                <Input id="orderNumber" name="orderNumber" type="number" placeholder="1" min="1" required />
+                <Label htmlFor="order">Nomor Urut</Label>
+                <Input id="order" name="order" type="number" placeholder="1" min="1" required />
               </div>
               <Button type="submit" className="w-full">
                 Buat Sub Kategori
@@ -416,7 +416,7 @@ export default function Tournament() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-4">
-                <Badge variant="outline">Urutan #{subCategory.orderNumber}</Badge>
+                <Badge variant="outline">Urutan #{subCategory.order}</Badge>
               </div>
               <Button 
                 onClick={() => navigateToAthleteGroups(subCategory)}

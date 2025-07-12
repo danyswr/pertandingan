@@ -85,7 +85,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache',
         },
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'follow'
       });
       
       clearTimeout(timeoutId);
@@ -128,9 +129,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Athletes routes
   app.get('/api/athletes', async (req, res) => {
     try {
+      // First try to get from Google Sheets atlets sheet
+      try {
+        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          action: 'getAllData'
+        });
+        
+        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
+          // Parse the sheet data (skip header row)
+          const athletes = data.data.slice(1).map((row: any[], index: number) => {
+            // Ensure we have enough columns
+            if (row.length < 13) {
+              // Pad with empty values if needed
+              while (row.length < 13) {
+                row.push('');
+              }
+            }
+            
+            try {
+              return {
+                id: index + 1, // Use row index as ID
+                name: row[1] || '', // Nama Lengkap
+                gender: row[2] || '', // Gender
+                birthDate: row[3] || '', // Tanggal Lahir
+                dojang: row[4] || '', // Dojang
+                belt: row[5] || '', // Sabuk
+                weight: parseFloat(row[6]) || 0, // Berat Badan
+                height: parseFloat(row[7]) || 0, // Tinggi Badan
+                category: row[8] || '', // Kategori
+                class: row[9] || '', // Kelas
+                isPresent: row[10] === 'TRUE' || row[10] === true || row[10] === 'true', // Hadir
+                status: row[11] || 'available', // Status
+                createdAt: row[12] ? String(row[12]) : new Date().toISOString() // Waktu Input sebagai string
+              };
+            } catch (parseError) {
+              console.error('Error parsing athlete row:', row, parseError);
+              return null;
+            }
+          }).filter(athlete => athlete !== null && athlete.name && athlete.name.trim() !== ''); // Filter out empty names and null values
+          
+          return res.json(athletes);
+        }
+      } catch (sheetsError) {
+        console.warn('Failed to fetch from Google Sheets, falling back to local storage:', sheetsError);
+      }
+      
+      // Fallback to local storage
       const athletes = await storage.getAllAthletes();
       res.json(athletes);
     } catch (error) {
+      console.error('Error fetching athletes:', error);
       res.status(500).json({ error: 'Failed to fetch athletes' });
     }
   });

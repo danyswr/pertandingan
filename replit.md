@@ -92,6 +92,14 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-12 - Migration from Replit Agent & Google Sheets Integration Fix
+- **Migration Completed**: Successfully migrated project from Replit Agent to standard Replit environment
+- **Google Sheets Direct Reading**: Fixed athlete data display to read directly from `atlets` sheet in Google Sheets
+- **Import Workflow**: "Pilih Kejuaraan" now only used for importing new athletes, not for viewing existing data
+- **Data Persistence**: Athlete data now persists and displays immediately upon page refresh
+- **Code Quality**: Fixed duplicate key warnings in month mapping for date parsing
+- **API Endpoints**: Enhanced `/api/athletes` endpoint to fetch data directly from Google Sheets with local storage fallback
+
 ### 2025-01-11 - Performance Optimization & Real-time Enhancements
 - **Caching System**: Implemented server-side caching for Google Sheets data with 30-second TTL
 - **Real-time Updates**: Enhanced WebSocket functionality with automatic reconnection

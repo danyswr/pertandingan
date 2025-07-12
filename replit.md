@@ -92,6 +92,16 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-12 - Hierarchical Tournament System Implementation
+- **Tournament System Restructure**: Removed "Bracket Turnamen" navbar and integrated tournament management into matches page
+- **Hierarchical Structure**: Implemented Main Categories → Sub Categories → Athlete Groups → Group Athletes flow
+- **Card-based UI**: Created responsive card interface for each tournament level navigation
+- **Match Management**: Built red vs blue corner match system with win buttons and automatic replacement
+- **Queue System**: Implemented athlete queuing and automatic elimination management
+- **Google Sheets Integration**: Added support for tournament sheets (Kategori_Utama, SubKategori, Kelompok_Atlet, daftar_kelompok)
+- **CRUD Operations**: Full create, read, update, delete functionality for all tournament levels
+- **Attendance Fix**: Resolved athlete sync issues for attendance updates with proper Google Sheets fallback
+
 ### 2025-07-12 - Migration from Replit Agent & Performance Optimization
 - **Migration Completed**: Successfully migrated project from Replit Agent to standard Replit environment
 - **Performance Optimization**: Attendance updates now respond in 1ms (previously 2+ seconds) with asynchronous Google Sheets sync

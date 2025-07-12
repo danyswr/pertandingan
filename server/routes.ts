@@ -487,6 +487,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let athlete = await storage.getAthleteById(id);
       
       if (!athlete) {
+        // If not found, try to sync from Google Sheets first
+        try {
+          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+            action: 'getAllData'
+          });
+          
+          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
+            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
+            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
+            if (athleteRow && athleteRow.length > 0) {
+              // Create the athlete in local storage with original data
+              const athleteData = {
+                name: athleteRow[1] || '',
+                gender: athleteRow[2] || '',
+                birthDate: athleteRow[3] || '',
+                dojang: athleteRow[4] || '',
+                belt: athleteRow[5] || '',
+                weight: parseFloat(athleteRow[6]) || 0,
+                height: parseFloat(athleteRow[7]) || 0,
+                category: athleteRow[8] || '',
+                class: athleteRow[9] || '',
+                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
+                status: athleteRow[11] || 'available'
+              };
+              
+              athlete = await storage.createAthlete(athleteData);
+            }
+          }
+        } catch (syncError) {
+          console.error('Failed to sync athlete from Google Sheets:', syncError);
+        }
+      }
+      
+      if (!athlete) {
         return res.status(404).json({ error: 'Athlete not found' });
       }
       

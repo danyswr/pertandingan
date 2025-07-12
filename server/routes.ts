@@ -115,6 +115,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('Athlete not found');
       }
 
+      console.log(`Attempting to update Google Sheets attendance for athlete ${athleteId} to ${isPresent}`);
+
       const postData = new URLSearchParams({
         action: 'updateAttendance',
         athleteId: athleteId.toString(),
@@ -130,18 +132,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: postData.toString(),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'follow'
       });
 
       clearTimeout(timeoutId);
 
+      console.log(`Google Sheets response status: ${response.status}`);
+      console.log(`Google Sheets response headers:`, Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const responseText = await response.text();
+        console.error(`Google Sheets error response: ${responseText}`);
+        throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
       }
 
-      const result = await response.json();
-      console.log('Google Sheets attendance update result:', result);
-      return result;
+      const responseText = await response.text();
+      console.log(`Google Sheets raw response: ${responseText}`);
+
+      try {
+        const result = JSON.parse(responseText);
+        console.log('Google Sheets attendance update result:', result);
+        return result;
+      } catch (parseError) {
+        console.error('Failed to parse Google Sheets response as JSON:', parseError);
+        // If it's not JSON, it might be HTML redirect, try to extract the actual URL
+        if (responseText.includes('href=')) {
+          const match = responseText.match(/href="([^"]*)">/);
+          if (match) {
+            const redirectUrl = match[1].replace(/&amp;/g, '&');
+            console.log('Found redirect URL:', redirectUrl);
+            
+            // Try the redirect URL
+            const redirectResponse = await fetch(redirectUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+              }
+            });
+            
+            const redirectResult = await redirectResponse.text();
+            console.log('Redirect response:', redirectResult);
+            
+            try {
+              return JSON.parse(redirectResult);
+            } catch (redirectParseError) {
+              console.error('Failed to parse redirect response:', redirectParseError);
+              return { success: false, error: 'Invalid response format' };
+            }
+          }
+        }
+        return { success: false, error: 'Invalid response format' };
+      }
     } catch (error) {
       console.error('Failed to update Google Sheets attendance:', error);
       throw error;

@@ -20,7 +20,7 @@ const GOOGLE_SHEETS_CONFIG = {
 
 // Cache untuk mempercepat pengambilan data
 const dataCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_DURATION = 30000; // 30 detik
+const CACHE_DURATION = 5000; // 5 detik (reduced for quicker updates)
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -129,6 +129,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Athletes routes
   app.get('/api/athletes', async (req, res) => {
     try {
+      // Get modified athletes from local storage (these take priority)
+      const localAthletes = await storage.getAllAthletes();
+      const localAthleteMap = new Map();
+      localAthletes.forEach(athlete => {
+        localAthleteMap.set(athlete.id, athlete);
+      });
+
       // First try to get from Google Sheets atlets sheet
       try {
         const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
@@ -138,9 +145,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
           // Parse the sheet data (skip header row)
           const athletes = data.data.slice(1).map((row: any[], index: number) => {
-            // Ensure we have enough columns
+            const athleteId = index + 1;
+            
+            // If athlete has been modified locally, use local data
+            if (localAthleteMap.has(athleteId)) {
+              const localAthlete = localAthleteMap.get(athleteId);
+              localAthleteMap.delete(athleteId); // Remove to avoid duplicates
+              return localAthlete;
+            }
+            
+            // Ensure we have enough columns for Google Sheets data
             if (row.length < 13) {
-              // Pad with empty values if needed
               while (row.length < 13) {
                 row.push('');
               }
@@ -148,7 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             try {
               return {
-                id: index + 1, // Use row index as ID
+                id: athleteId, // Use row index as ID
                 name: row[1] || '', // Nama Lengkap
                 gender: row[2] || '', // Gender
                 birthDate: row[3] || '', // Tanggal Lahir
@@ -166,7 +181,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Error parsing athlete row:', row, parseError);
               return null;
             }
-          }).filter(athlete => athlete !== null && athlete.name && athlete.name.trim() !== ''); // Filter out empty names and null values
+          }).filter(athlete => athlete !== null && athlete.name && athlete.name.trim() !== '');
+          
+          // Add any remaining local athletes that weren't in Google Sheets (newly created)
+          localAthleteMap.forEach(athlete => {
+            athletes.push(athlete);
+          });
           
           return res.json(athletes);
         }
@@ -174,9 +194,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('Failed to fetch from Google Sheets, falling back to local storage:', sheetsError);
       }
       
-      // Fallback to local storage
-      const athletes = await storage.getAllAthletes();
-      res.json(athletes);
+      // Fallback to local storage only
+      res.json(localAthletes);
     } catch (error) {
       console.error('Error fetching athletes:', error);
       res.status(500).json({ error: 'Failed to fetch athletes' });
@@ -232,6 +251,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertAthleteSchema.parse(req.body);
       const athlete = await storage.createAthlete(validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'athlete_created', data: athlete });
       res.json(athlete);
     } catch (error) {
@@ -247,10 +270,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const validatedData = insertAthleteSchema.partial().parse(req.body);
-      const athlete = await storage.updateAthlete(id, validatedData);
+      
+      // First check if athlete exists in local storage
+      let athlete = await storage.getAthleteById(id);
+      
+      if (!athlete) {
+        // If not found, try to sync from Google Sheets first
+        try {
+          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+            action: 'getAllData'
+          });
+          
+          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
+            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
+            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
+            if (athleteRow && athleteRow.length > 0) {
+              // Create the athlete in local storage with original data
+              const athleteData = {
+                name: athleteRow[1] || '',
+                gender: athleteRow[2] || '',
+                birthDate: athleteRow[3] || '',
+                dojang: athleteRow[4] || '',
+                belt: athleteRow[5] || '',
+                weight: parseFloat(athleteRow[6]) || 0,
+                height: parseFloat(athleteRow[7]) || 0,
+                category: athleteRow[8] || '',
+                class: athleteRow[9] || '',
+                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
+                status: athleteRow[11] || 'available'
+              };
+              
+              athlete = await storage.createAthlete(athleteData);
+            }
+          }
+        } catch (syncError) {
+          console.error('Failed to sync athlete from Google Sheets:', syncError);
+        }
+      }
+      
+      if (!athlete) {
+        return res.status(404).json({ error: 'Athlete not found' });
+      }
+      
+      // Update athlete
+      athlete = await storage.updateAthlete(id, validatedData);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'athlete_updated', data: athlete });
       res.json(athlete);
     } catch (error) {
+      console.error('Update athlete error:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid athlete data', details: error.errors });
       } else {
@@ -263,10 +334,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const { isPresent } = req.body;
-      const athlete = await storage.updateAthleteAttendance(id, isPresent);
+      
+      // First check if athlete exists in local storage
+      let athlete = await storage.getAthleteById(id);
+      
+      if (!athlete) {
+        // If not found, try to sync from Google Sheets first
+        try {
+          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+            action: 'getAllData'
+          });
+          
+          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
+            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
+            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
+            if (athleteRow && athleteRow.length > 0) {
+              // Create the athlete in local storage
+              const athleteData = {
+                name: athleteRow[1] || '',
+                gender: athleteRow[2] || '',
+                birthDate: athleteRow[3] || '',
+                dojang: athleteRow[4] || '',
+                belt: athleteRow[5] || '',
+                weight: parseFloat(athleteRow[6]) || 0,
+                height: parseFloat(athleteRow[7]) || 0,
+                category: athleteRow[8] || '',
+                class: athleteRow[9] || '',
+                isPresent: isPresent,
+                status: 'available'
+              };
+              
+              athlete = await storage.createAthlete(athleteData);
+            }
+          }
+        } catch (syncError) {
+          console.error('Failed to sync athlete from Google Sheets:', syncError);
+        }
+      }
+      
+      if (!athlete) {
+        return res.status(404).json({ error: 'Athlete not found' });
+      }
+      
+      // Update attendance
+      athlete = await storage.updateAthleteAttendance(id, isPresent);
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
+      
       broadcast({ type: 'athlete_attendance_updated', data: athlete });
       res.json(athlete);
     } catch (error) {
+      console.error('Attendance update error:', error);
       res.status(500).json({ error: 'Failed to update athlete attendance' });
     }
   });
@@ -279,23 +398,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete athlete' });
-    }
-  });
-
-  app.patch('/api/athletes/:id/attendance', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const { isPresent } = req.body;
-      
-      if (typeof isPresent !== 'boolean') {
-        return res.status(400).json({ error: 'isPresent must be a boolean' });
-      }
-      
-      const athlete = await storage.updateAthleteAttendance(id, isPresent);
-      broadcast({ type: 'attendance_updated', data: athlete });
-      res.json(athlete);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update attendance' });
     }
   });
 

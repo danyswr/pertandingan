@@ -381,7 +381,7 @@ function doGet(e) {
     
     // Get main categories
     if (params.action === 'getMainCategories') {
-      const sheet = spreadsheet.getSheetByName('Kategori_Utama');
+      const sheet = spreadsheet.getSheetByName('kategori_utama');
       if (!sheet) {
         return ContentService
           .createTextOutput(JSON.stringify({success: true, data: []}))
@@ -389,10 +389,19 @@ function doGet(e) {
       }
       
       const data = sheet.getDataRange().getValues();
-      const categories = data.slice(1).map(row => ({
-        id: row[0],
-        name: row[1]
-      }));
+      const categories = [];
+      
+      // Skip header row (index 0)
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] && data[i][1]) { // Check if ID and name exist
+          categories.push({
+            id: data[i][0],
+            name: data[i][1]
+          });
+        }
+      }
+      
+      console.log('Found', categories.length, 'main categories from kategori_utama sheet');
       
       return ContentService
         .createTextOutput(JSON.stringify({success: true, data: categories}))

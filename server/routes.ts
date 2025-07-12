@@ -656,6 +656,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Main Categories (Kategori_utama)
   app.get('/api/tournament/main-categories', async (req, res) => {
     try {
+      // First try to sync from Google Sheets to get latest data
+      try {
+        await storage.syncMainCategoriesFromGoogleSheets();
+      } catch (syncError) {
+        console.warn('Failed to sync main categories from Google Sheets:', syncError);
+      }
+      
       const categories = await storage.getAllMainCategories();
       res.json(categories);
     } catch (error) {

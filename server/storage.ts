@@ -109,6 +109,7 @@ export interface IStorage {
   
   // Google Sheets Tournament Bracket Integration
   syncMainCategoriesToGoogleSheets(): Promise<void>;
+  syncMainCategoriesFromGoogleSheets(): Promise<void>;
   syncSubCategoriesToGoogleSheets(): Promise<void>;
   syncAthleteGroupsToGoogleSheets(): Promise<void>;
   syncGroupAthletesToGoogleSheets(): Promise<void>;
@@ -894,6 +895,52 @@ export class MemStorage implements IStorage {
   async syncMainCategoriesToGoogleSheets(): Promise<void> {
     // TODO: Implement sync to Kategori_utama sheet
     console.log('Syncing main categories to Google Sheets - TODO');
+  }
+
+  async syncMainCategoriesFromGoogleSheets(): Promise<void> {
+    try {
+      // Use the same URL as management since it's the same Google Apps Script
+      const TOURNAMENT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
+
+      console.log('Loading main categories from Google Sheets...');
+      
+      const response = await fetch(`${TOURNAMENT_SHEETS_URL}?action=getMainCategories`, {
+        method: 'GET',
+        redirect: 'follow'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        // Clear existing main categories and reload from Google Sheets
+        this.mainCategories.clear();
+        
+        let maxId = 0;
+        for (const categoryData of data.data) {
+          const category: MainCategory = {
+            id: parseInt(categoryData.id),
+            name: categoryData.name
+          };
+          
+          this.mainCategories.set(category.id, category);
+          maxId = Math.max(maxId, category.id);
+        }
+        
+        // Update current ID counter
+        this.currentMainCategoryId = maxId + 1;
+        
+        console.log(`Loaded ${data.data.length} main categories from Google Sheets`);
+      } else {
+        console.log('No main categories found in Google Sheets or error occurred');
+      }
+    } catch (error) {
+      console.error('Error loading main categories from Google Sheets:', error);
+      // Don't throw error - let application continue with local data
+    }
   }
 
   async syncSubCategoriesToGoogleSheets(): Promise<void> {

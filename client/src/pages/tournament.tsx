@@ -508,9 +508,9 @@ export default function Tournament() {
 
   const [selectedCorner, setSelectedCorner] = useState<'red' | 'blue' | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterBelt, setFilterBelt] = useState('');
-  const [filterGender, setFilterGender] = useState('');
-  const [filterDojang, setFilterDojang] = useState('');
+  const [filterBelt, setFilterBelt] = useState('all');
+  const [filterGender, setFilterGender] = useState('all');
+  const [filterDojang, setFilterDojang] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'weight' | 'belt'>('name');
 
   const redCorner = groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated);
@@ -523,9 +523,9 @@ export default function Tournament() {
     .filter(athlete => 
       !groupAthletes.find(ga => ga.athleteId === athlete.id) &&
       athlete.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (filterBelt === '' || filterBelt === 'unknown' || athlete.belt === filterBelt) &&
-      (filterGender === '' || filterGender === 'unknown' || athlete.gender === filterGender) &&
-      (filterDojang === '' || filterDojang === 'unknown' || athlete.dojang === filterDojang) &&
+      (filterBelt === 'all' || filterBelt === '' || filterBelt === 'unknown' || athlete.belt === filterBelt) &&
+      (filterGender === 'all' || filterGender === '' || filterGender === 'unknown' || athlete.gender === filterGender) &&
+      (filterDojang === 'all' || filterDojang === '' || filterDojang === 'unknown' || athlete.dojang === filterDojang) &&
       athlete.isPresent // Only show present athletes
     )
     .sort((a, b) => {
@@ -694,9 +694,9 @@ export default function Tournament() {
         <Dialog open={!!selectedCorner} onOpenChange={() => {
           setSelectedCorner(null);
           setSearchTerm('');
-          setFilterBelt('');
-          setFilterGender('');
-          setFilterDojang('');
+          setFilterBelt('all');
+          setFilterGender('all');
+          setFilterDojang('all');
           setSortBy('name');
         }}>
           <DialogContent className="max-w-2xl">
@@ -725,7 +725,7 @@ export default function Tournament() {
                       <SelectValue placeholder="Semua Sabuk" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua Sabuk</SelectItem>
+                      <SelectItem value="all">Semua Sabuk</SelectItem>
                       {uniqueBelts.map(belt => (
                         <SelectItem key={belt} value={belt || 'unknown'}>{belt || 'Tidak diketahui'}</SelectItem>
                       ))}
@@ -740,7 +740,7 @@ export default function Tournament() {
                       <SelectValue placeholder="Semua Gender" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua Gender</SelectItem>
+                      <SelectItem value="all">Semua Gender</SelectItem>
                       {uniqueGenders.map(gender => (
                         <SelectItem key={gender} value={gender || 'unknown'}>{gender || 'Tidak diketahui'}</SelectItem>
                       ))}
@@ -757,7 +757,7 @@ export default function Tournament() {
                       <SelectValue placeholder="Semua Dojang" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Semua Dojang</SelectItem>
+                      <SelectItem value="all">Semua Dojang</SelectItem>
                       {uniqueDojangs.map(dojang => (
                         <SelectItem key={dojang} value={dojang || 'unknown'}>{dojang || 'Tidak diketahui'}</SelectItem>
                       ))}
@@ -786,9 +786,9 @@ export default function Tournament() {
                   size="sm"
                   onClick={() => {
                     setSearchTerm('');
-                    setFilterBelt('');
-                    setFilterGender('');
-                    setFilterDojang('');
+                    setFilterBelt('all');
+                    setFilterGender('all');
+                    setFilterDojang('all');
                     setSortBy('name');
                   }}
                 >

@@ -18,8 +18,8 @@ export default function Matches() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedRing, setSelectedRing] = useState("A");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterRing, setFilterRing] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterRing, setFilterRing] = useState("all");
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -140,8 +140,8 @@ export default function Matches() {
       
       const matchText = `${redAthlete?.name || ''} ${blueAthlete?.name || ''}`.toLowerCase();
       const searchMatch = searchTerm === '' || matchText.includes(searchTerm.toLowerCase());
-      const statusMatch = filterStatus === '' || match.status === filterStatus;
-      const ringMatch = filterRing === '' || match.ring === filterRing;
+      const statusMatch = filterStatus === 'all' || filterStatus === '' || match.status === filterStatus;
+      const ringMatch = filterRing === 'all' || filterRing === '' || match.ring === filterRing;
       
       return searchMatch && statusMatch && ringMatch;
     });
@@ -294,7 +294,7 @@ export default function Matches() {
                     <SelectValue placeholder="Semua Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Status</SelectItem>
+                    <SelectItem value="all">Semua Status</SelectItem>
                     <SelectItem value="active">Aktif</SelectItem>
                     <SelectItem value="completed">Selesai</SelectItem>
                     <SelectItem value="scheduled">Dijadwalkan</SelectItem>
@@ -309,7 +309,7 @@ export default function Matches() {
                     <SelectValue placeholder="Semua Ring" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Ring</SelectItem>
+                    <SelectItem value="all">Semua Ring</SelectItem>
                     <SelectItem value="A">Ring A</SelectItem>
                     <SelectItem value="B">Ring B</SelectItem>
                     <SelectItem value="C">Ring C</SelectItem>
@@ -323,8 +323,8 @@ export default function Matches() {
                   variant="outline" 
                   onClick={() => {
                     setSearchTerm('');
-                    setFilterStatus('');
-                    setFilterRing('');
+                    setFilterStatus('all');
+                    setFilterRing('all');
                   }}
                   className="w-full"
                 >

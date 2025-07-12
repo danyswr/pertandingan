@@ -113,7 +113,6 @@ export default function Tournament() {
 
   // Reset dialog states when closing
   const resetCreateAthleteGroupDialog = () => {
-    setShowCreateAthleteGroup(false);
     setSelectedRedCorner(null);
     setSelectedBlueCorner(null);
     setAthleteSearchQuery('');
@@ -199,6 +198,7 @@ export default function Tournament() {
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Kelompok atlet berhasil dibuat dengan atlet sudut" });
       resetCreateAthleteGroupDialog();
+      setShowCreateAthleteGroup(false);
       queryClient.invalidateQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
       queryClient.invalidateQueries({ queryKey: ['group-athletes'] });
     },
@@ -674,7 +674,7 @@ export default function Tournament() {
       </div>
 
       <div className="flex justify-end">
-        <Dialog open={showCreateAthleteGroup} onOpenChange={resetCreateAthleteGroupDialog}>
+        <Dialog open={showCreateAthleteGroup} onOpenChange={setShowCreateAthleteGroup}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -889,7 +889,10 @@ export default function Tournament() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={resetCreateAthleteGroupDialog}
+                  onClick={() => {
+                    resetCreateAthleteGroupDialog();
+                    setShowCreateAthleteGroup(false);
+                  }}
                 >
                   Batal
                 </Button>

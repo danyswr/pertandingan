@@ -827,6 +827,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/tournament/sub-categories/:id/athlete-groups', async (req, res) => {
     try {
       const subCategoryId = parseInt(req.params.id);
+      
+      // First try to sync from Google Sheets to get latest data
+      try {
+        await storage.syncAthleteGroupsFromGoogleSheets(subCategoryId);
+      } catch (syncError) {
+        console.warn('Failed to sync athlete groups from Google Sheets:', syncError);
+      }
+      
       const athleteGroups = await storage.getAthleteGroupsBySubCategory(subCategoryId);
       res.json(athleteGroups);
     } catch (error) {

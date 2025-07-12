@@ -112,6 +112,7 @@ export interface IStorage {
   syncMainCategoriesFromGoogleSheets(): Promise<void>;
   syncSubCategoriesFromGoogleSheets(mainCategoryId: number): Promise<void>;
   syncSubCategoriesToGoogleSheets(): Promise<void>;
+  syncAthleteGroupsFromGoogleSheets(subCategoryId: number): Promise<void>;
   syncAthleteGroupsToGoogleSheets(): Promise<void>;
   syncGroupAthletesToGoogleSheets(): Promise<void>;
 }
@@ -1001,6 +1002,63 @@ export class MemStorage implements IStorage {
   async syncSubCategoriesToGoogleSheets(): Promise<void> {
     // TODO: Implement sync to SubKategori sheet
     console.log('Syncing sub categories to Google Sheets - TODO');
+  }
+
+  async syncAthleteGroupsFromGoogleSheets(subCategoryId: number): Promise<void> {
+    try {
+      // Use the same URL as management since it's the same Google Apps Script
+      const TOURNAMENT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
+
+      console.log(`Loading athlete groups from Google Sheets for sub category ${subCategoryId}...`);
+      
+      const response = await fetch(`${TOURNAMENT_SHEETS_URL}?action=getAthleteGroups&subCategoryId=${subCategoryId}`, {
+        method: 'GET',
+        redirect: 'follow'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        // Clear existing athlete groups for this sub category and reload from Google Sheets
+        const existingAthleteGroups = Array.from(this.athleteGroups.values()).filter(ag => ag.subCategoryId !== subCategoryId);
+        this.athleteGroups.clear();
+        
+        // Re-add athlete groups from other sub categories
+        existingAthleteGroups.forEach(ag => this.athleteGroups.set(ag.id, ag));
+        
+        let maxId = Math.max(...Array.from(this.athleteGroups.keys()), 0);
+        
+        for (const groupData of data.data) {
+          const athleteGroup: AthleteGroup = {
+            id: parseInt(groupData.id),
+            subCategoryId: parseInt(groupData.subCategoryId),
+            name: groupData.name,
+            description: groupData.description,
+            matchNumber: parseInt(groupData.order) || 1,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          
+          this.athleteGroups.set(athleteGroup.id, athleteGroup);
+          maxId = Math.max(maxId, athleteGroup.id);
+        }
+        
+        // Update current ID counter
+        this.currentAthleteGroupId = maxId + 1;
+        
+        console.log(`Loaded ${data.data.length} athlete groups from Google Sheets for sub category ${subCategoryId}`);
+      } else {
+        console.log(`No athlete groups found in Google Sheets for sub category ${subCategoryId} or error occurred`);
+      }
+    } catch (error) {
+      console.error('Error loading athlete groups from Google Sheets:', error);
+      // Don't throw error - let application continue with local data
+    }
   }
 
   async syncAthleteGroupsToGoogleSheets(): Promise<void> {

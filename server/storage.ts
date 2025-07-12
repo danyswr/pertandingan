@@ -110,6 +110,7 @@ export interface IStorage {
   // Google Sheets Tournament Bracket Integration
   syncMainCategoriesToGoogleSheets(): Promise<void>;
   syncMainCategoriesFromGoogleSheets(): Promise<void>;
+  syncSubCategoriesFromGoogleSheets(mainCategoryId: number): Promise<void>;
   syncSubCategoriesToGoogleSheets(): Promise<void>;
   syncAthleteGroupsToGoogleSheets(): Promise<void>;
   syncGroupAthletesToGoogleSheets(): Promise<void>;
@@ -939,6 +940,60 @@ export class MemStorage implements IStorage {
       }
     } catch (error) {
       console.error('Error loading main categories from Google Sheets:', error);
+      // Don't throw error - let application continue with local data
+    }
+  }
+
+  async syncSubCategoriesFromGoogleSheets(mainCategoryId: number): Promise<void> {
+    try {
+      // Use the same URL as management since it's the same Google Apps Script
+      const TOURNAMENT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
+
+      console.log(`Loading sub categories from Google Sheets for main category ${mainCategoryId}...`);
+      
+      const response = await fetch(`${TOURNAMENT_SHEETS_URL}?action=getSubCategories&mainCategoryId=${mainCategoryId}`, {
+        method: 'GET',
+        redirect: 'follow'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        // Clear existing sub categories for this main category and reload from Google Sheets
+        const existingSubCategories = Array.from(this.subCategories.values()).filter(sc => sc.mainCategoryId !== mainCategoryId);
+        this.subCategories.clear();
+        
+        // Re-add sub categories from other main categories
+        existingSubCategories.forEach(sc => this.subCategories.set(sc.id, sc));
+        
+        let maxId = Math.max(...Array.from(this.subCategories.keys()), 0);
+        
+        for (const subCategoryData of data.data) {
+          const subCategory: SubCategory = {
+            id: parseInt(subCategoryData.id),
+            mainCategoryId: parseInt(subCategoryData.mainCategoryId),
+            name: subCategoryData.name,
+            order: parseInt(subCategoryData.order),
+            isActive: true
+          };
+          
+          this.subCategories.set(subCategory.id, subCategory);
+          maxId = Math.max(maxId, subCategory.id);
+        }
+        
+        // Update current ID counter
+        this.currentSubCategoryId = maxId + 1;
+        
+        console.log(`Loaded ${data.data.length} sub categories from Google Sheets for main category ${mainCategoryId}`);
+      } else {
+        console.log(`No sub categories found in Google Sheets for main category ${mainCategoryId} or error occurred`);
+      }
+    } catch (error) {
+      console.error('Error loading sub categories from Google Sheets:', error);
       // Don't throw error - let application continue with local data
     }
   }

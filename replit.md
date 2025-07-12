@@ -92,7 +92,7 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
-### 2025-07-12 - Migration from Replit Agent to Standard Replit Environment
+### 2025-07-12 - Migration from Replit Agent to Standard Replit Environment (COMPLETED)
 - **Migration Completed**: Successfully migrated the complete Taekwondo Tournament Management System from Replit Agent to standard Replit environment
 - **Environment Verification**: Confirmed all packages installed correctly and workflow running properly on port 5000
 - **WebSocket Functionality**: Verified real-time communication working with automatic reconnection
@@ -101,6 +101,7 @@ The system uses a relational database design with the following core entities:
 - **Google Sheets Integration**: Existing Google Apps Script integration maintained and operational
 - **Frontend Architecture**: React 18 with TypeScript, Wouter routing, and shadcn/ui components all working correctly
 - **Security Practices**: Client/server separation maintained with proper session management
+- **Sub-Categories Fix**: Resolved Google Sheets integration issue where sub-categories were not loading from SubKategori sheet
 
 ### 2025-07-12 - Hierarchical Tournament System Implementation
 - **Tournament System Restructure**: Removed "Bracket Turnamen" navbar and integrated tournament management into matches page

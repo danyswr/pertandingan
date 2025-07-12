@@ -695,229 +695,268 @@ export default function Tournament() {
               Buat Kelompok
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Buat Kelompok Atlet</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateAthleteGroup} className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">Nama Kelompok</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    placeholder="Contoh: Kelompok A, Final" 
-                    required 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="matchNumber">Nomor Partai</Label>
-                  <Input 
-                    id="matchNumber" 
-                    name="matchNumber" 
-                    type="number" 
-                    placeholder="1" 
-                    min="1" 
-                    required 
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="description">Deskripsi</Label>
-                <Textarea 
-                  id="description" 
-                  name="description" 
-                  placeholder="Deskripsi kelompok..." 
-                  rows={3}
-                />
-              </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Left Panel - Form Information */}
+              <div className="space-y-6">
+                <form onSubmit={handleCreateAthleteGroup} className="space-y-6">
+                  {/* Basic Info Card */}
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg">Informasi Kelompok</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label htmlFor="name" className="text-sm font-medium">Nama Kelompok</Label>
+                        <Input 
+                          id="name" 
+                          name="name" 
+                          placeholder="Contoh: Kelompok A, Final" 
+                          className="mt-1"
+                          required 
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="matchNumber" className="text-sm font-medium">Nomor Partai</Label>
+                        <Input 
+                          id="matchNumber" 
+                          name="matchNumber" 
+                          type="number" 
+                          placeholder="1" 
+                          min="1" 
+                          className="mt-1"
+                          required 
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="description" className="text-sm font-medium">Deskripsi</Label>
+                        <Textarea 
+                          id="description" 
+                          name="description" 
+                          placeholder="Deskripsi kelompok (opsional)..." 
+                          rows={3}
+                          className="mt-1"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {/* Athlete Selection */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold mb-4">Pilih Atlet Sudut</h3>
-                
-                {/* Search and Filter */}
-                <div className="mb-4 space-y-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Cari atlet berdasarkan nama atau dojang..."
-                      value={athleteSearchQuery}
-                      onChange={(e) => setAthleteSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <Select value={athleteFilter.belt} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, belt: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filter Sabuk" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Sabuk</SelectItem>
-                        {uniqueBelts.map(belt => (
-                          <SelectItem key={belt} value={belt}>{belt}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    
-                    <Select value={athleteFilter.gender} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, gender: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filter Gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Gender</SelectItem>
-                        {uniqueGenders.map(gender => (
-                          <SelectItem key={gender} value={gender}>{gender}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    
-                    <Select value={athleteFilter.dojang} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, dojang: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filter Dojang" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Dojang</SelectItem>
-                        {uniqueDojangs.map(dojang => (
-                          <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="text-sm text-gray-600">
-                    Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet
-                  </div>
-                </div>
-
-                {/* Corner Selection - Horizontal Layout */}
-                <div className="flex gap-6">
-                  {/* Red Corner */}
-                  <div className="flex-1 border border-red-200 rounded-lg p-4">
-                    <h4 className="font-medium text-red-600 mb-3">Sudut Merah</h4>
-                    {selectedRedCorner ? (
-                      <div className="bg-red-50 p-3 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{selectedRedCorner.name}</p>
-                            <p className="text-sm text-gray-600">{selectedRedCorner.dojang}</p>
-                            <p className="text-sm text-gray-600">{selectedRedCorner.belt} • {selectedRedCorner.weight}kg</p>
-                          </div>
-                          <Button 
-                            type="button" 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => setSelectedRedCorner(null)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                  {/* Selected Athletes Display */}
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg">Atlet Terpilih</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Red Corner */}
+                      <div className="border border-red-200 rounded-lg p-4 bg-red-50/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-red-700">Sudut Merah</h4>
+                          {selectedRedCorner && (
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setSelectedRedCorner(null)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">Belum dipilih</p>
-                    )}
-                  </div>
-
-                  {/* Blue Corner */}
-                  <div className="flex-1 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-600 mb-3">Sudut Biru</h4>
-                    {selectedBlueCorner ? (
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{selectedBlueCorner.name}</p>
-                            <p className="text-sm text-gray-600">{selectedBlueCorner.dojang}</p>
-                            <p className="text-sm text-gray-600">{selectedBlueCorner.belt} • {selectedBlueCorner.weight}kg</p>
+                        {selectedRedCorner ? (
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm">{selectedRedCorner.name}</p>
+                            <p className="text-xs text-gray-600">{selectedRedCorner.dojang}</p>
+                            <p className="text-xs text-gray-600">{selectedRedCorner.belt} • {selectedRedCorner.weight}kg • {selectedRedCorner.gender}</p>
                           </div>
-                          <Button 
-                            type="button" 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => setSelectedBlueCorner(null)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">Belum dipilih</p>
+                        )}
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">Belum dipilih</p>
-                    )}
-                  </div>
-                </div>
 
-                {/* Athletes List - Horizontal Layout */}
-                <div className="mt-6">
-                  <h4 className="font-medium mb-3">Daftar Atlet</h4>
-                  <div className="max-h-60 overflow-y-auto border rounded-lg">
-                    {filteredAthletes.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        Tidak ada atlet yang sesuai dengan kriteria pencarian
+                      {/* Blue Corner */}
+                      <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-blue-700">Sudut Biru</h4>
+                          {selectedBlueCorner && (
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setSelectedBlueCorner(null)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                        {selectedBlueCorner ? (
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm">{selectedBlueCorner.name}</p>
+                            <p className="text-xs text-gray-600">{selectedBlueCorner.dojang}</p>
+                            <p className="text-xs text-gray-600">{selectedBlueCorner.belt} • {selectedBlueCorner.weight}kg • {selectedBlueCorner.gender}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">Belum dipilih</p>
+                        )}
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3">
-                        {filteredAthletes.map(athlete => (
-                          <div key={athlete.id} className="border rounded-lg p-3 hover:bg-gray-50">
-                            <div className="space-y-2">
-                              <div>
-                                <p className="font-medium text-sm">{athlete.name}</p>
-                                <p className="text-xs text-gray-600">
-                                  {athlete.dojang} • {athlete.belt} • {athlete.gender} • {athlete.weight}kg
-                                </p>
-                              </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="flex-1 text-xs border-red-200 text-red-600 hover:bg-red-50"
-                                  onClick={() => setSelectedRedCorner(athlete)}
-                                  disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
-                                >
-                                  Merah
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="flex-1 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                                  onClick={() => setSelectedBlueCorner(athlete)}
-                                  disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
-                                >
-                                  Biru
-                                </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Submit Buttons */}
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        resetCreateAthleteGroupDialog();
+                        setShowCreateAthleteGroup(false);
+                      }}
+                    >
+                      Batal
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={createAthleteGroupMutation.isPending}
+                    >
+                      {createAthleteGroupMutation.isPending ? 'Membuat...' : 'Buat Kelompok'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Right Panel - Athlete Selection */}
+              <div className="space-y-6">
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-lg">Pilih Atlet Sudut</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">{/* Athlete Selection */}
+                    {/* Search and Filter */}
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Cari atlet berdasarkan nama atau dojang..."
+                          value={athleteSearchQuery}
+                          onChange={(e) => setAthleteSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-2">
+                        <Select value={athleteFilter.belt} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, belt: value }))}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Semua Sabuk" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Sabuk</SelectItem>
+                            {uniqueBelts.map(belt => (
+                              <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        <Select value={athleteFilter.gender} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, gender: value }))}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Semua Gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Gender</SelectItem>
+                            {uniqueGenders.map(gender => (
+                              <SelectItem key={gender} value={gender}>{gender}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        <Select value={athleteFilter.dojang} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, dojang: value }))}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Semua Dojang" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Semua Dojang</SelectItem>
+                            {uniqueDojangs.map(dojang => (
+                              <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="text-xs text-gray-600 flex items-center justify-between">
+                        <span>Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet</span>
+                        {(athleteFilter.belt !== 'all' || athleteFilter.gender !== 'all' || athleteFilter.dojang !== 'all' || athleteSearchQuery) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setAthleteSearchQuery('');
+                              setAthleteFilter({ belt: 'all', gender: 'all', dojang: 'all' });
+                            }}
+                            className="h-6 text-xs"
+                          >
+                            Reset Filter
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Athletes List */}
+                    <div className="max-h-96 overflow-y-auto border rounded-lg">
+                      {filteredAthletes.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm">Tidak ada atlet yang sesuai dengan kriteria pencarian</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 p-3">
+                          {filteredAthletes.map(athlete => (
+                            <div key={athlete.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                              <div className="space-y-2">
+                                <div>
+                                  <p className="font-medium text-sm">{athlete.name}</p>
+                                  <p className="text-xs text-gray-600">
+                                    {athlete.dojang} • {athlete.belt} • {athlete.gender} • {athlete.weight}kg
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1 text-xs border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    onClick={() => setSelectedRedCorner(athlete)}
+                                    disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
+                                  >
+                                    {selectedRedCorner?.id === athlete.id ? '✓ Sudut Merah' : 'Pilih Merah'}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                                    onClick={() => setSelectedBlueCorner(athlete)}
+                                    disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
+                                  >
+                                    {selectedBlueCorner?.id === athlete.id ? '✓ Sudut Biru' : 'Pilih Biru'}
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-
-              {/* Submit Button */}
-              <div className="flex justify-end gap-3 pt-6 border-t">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    resetCreateAthleteGroupDialog();
-                    setShowCreateAthleteGroup(false);
-                  }}
-                >
-                  Batal
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={createAthleteGroupMutation.isPending}
-                >
-                  {createAthleteGroupMutation.isPending ? 'Membuat...' : 'Buat Kelompok'}
-                </Button>
-              </div>
-            </form>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

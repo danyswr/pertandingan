@@ -61,6 +61,10 @@ export default function Tournament() {
   });
   const [groupGender, setGroupGender] = useState<string | null>(null);
   const [groupFormData, setGroupFormData] = useState<{name: string; matchNumber: string; description: string} | null>(null);
+  const [activeSelection, setActiveSelection] = useState<'red' | 'blue' | 'queue' | null>(null);
+  const [ageRange, setAgeRange] = useState<{min: string; max: string}>({min: '', max: ''});
+  const [weightRange, setWeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
+  const [heightRange, setHeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -107,12 +111,25 @@ export default function Tournament() {
     const matchesGender = !athleteFilter.gender || athleteFilter.gender === 'all' || athlete.gender === athleteFilter.gender;
     const matchesDojang = !athleteFilter.dojang || athleteFilter.dojang === 'all' || athlete.dojang === athleteFilter.dojang;
     
+    // Age range filter
+    const matchesAge = (!ageRange.min || athlete.age >= parseInt(ageRange.min)) && 
+                      (!ageRange.max || athlete.age <= parseInt(ageRange.max));
+    
+    // Weight range filter
+    const matchesWeight = (!weightRange.min || athlete.weight >= parseFloat(weightRange.min)) && 
+                         (!weightRange.max || athlete.weight <= parseFloat(weightRange.max));
+    
+    // Height range filter
+    const matchesHeight = (!heightRange.min || athlete.height >= parseFloat(heightRange.min)) && 
+                         (!heightRange.max || athlete.height <= parseFloat(heightRange.max));
+    
     // Exclude already selected athletes
     const isNotSelected = athlete.id !== selectedRedCorner?.id && 
                          athlete.id !== selectedBlueCorner?.id && 
                          !selectedQueue.find(qa => qa.id === athlete.id);
     
-    return matchesSearch && matchesBelt && matchesGender && matchesDojang && isNotSelected && athlete.isPresent;
+    return matchesSearch && matchesBelt && matchesGender && matchesDojang && 
+           matchesAge && matchesWeight && matchesHeight && isNotSelected && athlete.isPresent;
   });
 
   // Get unique values for filters
@@ -130,28 +147,37 @@ export default function Tournament() {
     setAthleteFilter({ belt: 'all', gender: 'all', dojang: 'all' });
     setGroupGender(null);
     setGroupFormData(null);
+    setActiveSelection(null);
+    setAgeRange({min: '', max: ''});
+    setWeightRange({min: '', max: ''});
+    setHeightRange({min: '', max: ''});
   };
 
-  // Auto-set gender filter when first athlete is selected
-  const handleAthleteSelection = (athlete: Athlete, position: 'red' | 'blue' | 'queue') => {
-    if (position === 'red') {
+  // Handle athlete card click based on active selection
+  const handleAthleteCardClick = (athlete: Athlete) => {
+    if (!activeSelection) return;
+
+    if (activeSelection === 'red') {
       setSelectedRedCorner(athlete);
       if (!groupGender) {
         setGroupGender(athlete.gender);
         setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
       }
-    } else if (position === 'blue') {
+      setActiveSelection(null); // Reset selection after placing athlete
+    } else if (activeSelection === 'blue') {
       setSelectedBlueCorner(athlete);
       if (!groupGender) {
         setGroupGender(athlete.gender);
         setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
       }
-    } else if (position === 'queue') {
+      setActiveSelection(null); // Reset selection after placing athlete
+    } else if (activeSelection === 'queue') {
       setSelectedQueue(prev => [...prev, athlete]);
       if (!groupGender) {
         setGroupGender(athlete.gender);
         setAthleteFilter(prev => ({ ...prev, gender: athlete.gender }));
       }
+      // Don't reset selection for queue as users might want to add multiple athletes
     }
   };
 
@@ -762,7 +788,8 @@ export default function Tournament() {
               // Step 1: Group Information
               <form onSubmit={(e) => {
                 e.preventDefault();
-                const formData = new FormData(e.target as HTMLFormElement);
+                const form = e.target as HTMLFormElement;
+                const formData = new FormData(form);
                 setGroupFormData({
                   name: formData.get('name') as string,
                   matchNumber: formData.get('matchNumber') as string,
@@ -845,15 +872,30 @@ export default function Tournament() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {/* Red Corner */}
-                      <div className="border border-red-200 rounded-lg p-4 bg-red-50/50">
+                      <div 
+                        className={cn(
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          activeSelection === 'red' 
+                            ? "border-red-500 bg-red-100 shadow-lg ring-2 ring-red-200 animate-pulse" 
+                            : "border-red-200 bg-red-50/50 hover:bg-red-100/50",
+                          selectedRedCorner && "bg-red-100"
+                        )}
+                        onClick={() => setActiveSelection(activeSelection === 'red' ? null : 'red')}
+                      >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-red-700">Sudut Merah</h4>
+                          <h4 className={cn(
+                            "font-medium",
+                            activeSelection === 'red' ? "text-red-800" : "text-red-700"
+                          )}>
+                            Sudut Merah {activeSelection === 'red' && '(Klik atlet untuk memilih)'}
+                          </h4>
                           {selectedRedCorner && (
                             <Button 
                               type="button" 
                               size="sm" 
                               variant="outline"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedRedCorner(null);
                                 if (!selectedBlueCorner && selectedQueue.length === 0) {
                                   setGroupGender(null);
@@ -878,15 +920,30 @@ export default function Tournament() {
                       </div>
 
                       {/* Blue Corner */}
-                      <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50">
+                      <div 
+                        className={cn(
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          activeSelection === 'blue' 
+                            ? "border-blue-500 bg-blue-100 shadow-lg ring-2 ring-blue-200 animate-pulse" 
+                            : "border-blue-200 bg-blue-50/50 hover:bg-blue-100/50",
+                          selectedBlueCorner && "bg-blue-100"
+                        )}
+                        onClick={() => setActiveSelection(activeSelection === 'blue' ? null : 'blue')}
+                      >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-blue-700">Sudut Biru</h4>
+                          <h4 className={cn(
+                            "font-medium",
+                            activeSelection === 'blue' ? "text-blue-800" : "text-blue-700"
+                          )}>
+                            Sudut Biru {activeSelection === 'blue' && '(Klik atlet untuk memilih)'}
+                          </h4>
                           {selectedBlueCorner && (
                             <Button 
                               type="button" 
                               size="sm" 
                               variant="outline"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedBlueCorner(null);
                                 if (!selectedRedCorner && selectedQueue.length === 0) {
                                   setGroupGender(null);
@@ -911,9 +968,22 @@ export default function Tournament() {
                       </div>
 
                       {/* Queue */}
-                      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                      <div 
+                        className={cn(
+                          "border rounded-lg p-4 cursor-pointer transition-all duration-200",
+                          activeSelection === 'queue' 
+                            ? "border-gray-500 bg-gray-100 shadow-lg ring-2 ring-gray-200 animate-pulse" 
+                            : "border-gray-200 bg-gray-50/50 hover:bg-gray-100/50"
+                        )}
+                        onClick={() => setActiveSelection(activeSelection === 'queue' ? null : 'queue')}
+                      >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-gray-700">Antrian ({selectedQueue.length})</h4>
+                          <h4 className={cn(
+                            "font-medium",
+                            activeSelection === 'queue' ? "text-gray-800" : "text-gray-700"
+                          )}>
+                            Antrian ({selectedQueue.length}) {activeSelection === 'queue' && '(Klik atlet untuk menambah)'}
+                          </h4>
                         </div>
                         {selectedQueue.length > 0 ? (
                           <div className="space-y-2">
@@ -927,7 +997,8 @@ export default function Tournament() {
                                   type="button" 
                                   size="sm" 
                                   variant="outline"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     removeAthleteFromQueue(athlete.id);
                                     if (!selectedRedCorner && !selectedBlueCorner && selectedQueue.length === 1) {
                                       setGroupGender(null);
@@ -1062,11 +1133,71 @@ export default function Tournament() {
                               ))}
                             </SelectContent>
                           </Select>
+
+                          {/* Age Range Filter */}
+                          <div className="grid grid-cols-2 gap-1">
+                            <Input
+                              placeholder="Umur min"
+                              type="number"
+                              value={ageRange.min}
+                              onChange={(e) => setAgeRange(prev => ({ ...prev, min: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                            <Input
+                              placeholder="Umur max"
+                              type="number"
+                              value={ageRange.max}
+                              onChange={(e) => setAgeRange(prev => ({ ...prev, max: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                          </div>
+
+                          {/* Weight Range Filter */}
+                          <div className="grid grid-cols-2 gap-1">
+                            <Input
+                              placeholder="Berat min (kg)"
+                              type="number"
+                              step="0.1"
+                              value={weightRange.min}
+                              onChange={(e) => setWeightRange(prev => ({ ...prev, min: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                            <Input
+                              placeholder="Berat max (kg)"
+                              type="number"
+                              step="0.1"
+                              value={weightRange.max}
+                              onChange={(e) => setWeightRange(prev => ({ ...prev, max: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                          </div>
+
+                          {/* Height Range Filter */}
+                          <div className="grid grid-cols-2 gap-1">
+                            <Input
+                              placeholder="Tinggi min (cm)"
+                              type="number"
+                              step="0.1"
+                              value={heightRange.min}
+                              onChange={(e) => setHeightRange(prev => ({ ...prev, min: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                            <Input
+                              placeholder="Tinggi max (cm)"
+                              type="number"
+                              step="0.1"
+                              value={heightRange.max}
+                              onChange={(e) => setHeightRange(prev => ({ ...prev, max: e.target.value }))}
+                              className="h-9 text-xs"
+                            />
+                          </div>
                         </div>
                         
                         <div className="text-xs text-gray-600 flex items-center justify-between">
                           <span>Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet</span>
-                          {(athleteFilter.belt !== 'all' || athleteFilter.dojang !== 'all' || athleteSearchQuery) && !groupGender && (
+                          {(athleteFilter.belt !== 'all' || athleteFilter.dojang !== 'all' || athleteSearchQuery || 
+                            ageRange.min || ageRange.max || weightRange.min || weightRange.max || 
+                            heightRange.min || heightRange.max) && !groupGender && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1074,6 +1205,9 @@ export default function Tournament() {
                               onClick={() => {
                                 setAthleteSearchQuery('');
                                 setAthleteFilter({ belt: 'all', gender: groupGender || 'all', dojang: 'all' });
+                                setAgeRange({min: '', max: ''});
+                                setWeightRange({min: '', max: ''});
+                                setHeightRange({min: '', max: ''});
                               }}
                               className="h-6 text-xs"
                             >
@@ -1092,46 +1226,52 @@ export default function Tournament() {
                           </div>
                         ) : (
                           <div className="space-y-2 p-3">
+                            {!activeSelection && (
+                              <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border-2 border-dashed">
+                                <p className="text-sm">Pilih posisi terlebih dahulu (Sudut Merah, Sudut Biru, atau Antrian)</p>
+                              </div>
+                            )}
                             {filteredAthletes.map(athlete => (
-                              <div key={athlete.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                              <div 
+                                key={athlete.id} 
+                                className={cn(
+                                  "border rounded-lg p-3 transition-all duration-200",
+                                  activeSelection 
+                                    ? "cursor-pointer hover:bg-gray-50 hover:shadow-md hover:border-gray-400" 
+                                    : "opacity-50 cursor-not-allowed",
+                                  activeSelection === 'red' && "hover:bg-red-50 hover:border-red-300",
+                                  activeSelection === 'blue' && "hover:bg-blue-50 hover:border-blue-300",
+                                  activeSelection === 'queue' && "hover:bg-gray-100 hover:border-gray-400"
+                                )}
+                                onClick={() => activeSelection && handleAthleteCardClick(athlete)}
+                              >
                                 <div className="space-y-2">
                                   <div>
                                     <p className="font-medium text-sm">{athlete.name}</p>
                                     <p className="text-xs text-gray-600">
                                       {athlete.dojang} • {athlete.belt} • {athlete.gender} • {athlete.weight}kg
                                     </p>
+                                    <p className="text-xs text-gray-500">
+                                      Umur: {athlete.age} • Tinggi: {athlete.height}cm
+                                    </p>
                                   </div>
-                                  <div className="grid grid-cols-3 gap-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-xs border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                      onClick={() => handleAthleteSelection(athlete, 'red')}
-                                      disabled={!!selectedRedCorner}
-                                    >
-                                      Pilih Merah
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-xs border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-                                      onClick={() => handleAthleteSelection(athlete, 'blue')}
-                                      disabled={!!selectedBlueCorner}
-                                    >
-                                      Pilih Biru
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-xs border-gray-200 text-gray-600 hover:bg-gray-50"
-                                      onClick={() => handleAthleteSelection(athlete, 'queue')}
-                                    >
-                                      + Antrian
-                                    </Button>
-                                  </div>
+                                  {activeSelection && (
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className={cn(
+                                          "flex-1 text-xs pointer-events-none",
+                                          activeSelection === 'red' ? "border-red-200 text-red-600 bg-red-50" :
+                                          activeSelection === 'blue' ? "border-blue-200 text-blue-600 bg-blue-50" :
+                                          "border-gray-200 text-gray-600 bg-gray-50"
+                                        )}
+                                      >
+                                        {activeSelection === 'red' ? 'Pilih Merah' :
+                                         activeSelection === 'blue' ? 'Pilih Biru' : '+ Antrian'}
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             ))}

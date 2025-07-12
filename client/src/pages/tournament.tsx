@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { api } from "@/lib/api";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X, MoreVertical, Search, Filter } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X, MoreVertical, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { 
   MainCategory, 
@@ -66,6 +66,7 @@ export default function Tournament() {
   const [weightRange, setWeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [heightRange, setHeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [contextMenu, setContextMenu] = useState<{athlete: Athlete; x: number; y: number; currentPosition: 'red' | 'blue' | 'queue'} | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -153,6 +154,7 @@ export default function Tournament() {
     setWeightRange({min: '', max: ''});
     setHeightRange({min: '', max: ''});
     setContextMenu(null);
+    setShowFilters(false);
   };
 
   // Handle athlete card click with automatic position filling
@@ -902,20 +904,19 @@ export default function Tournament() {
               </form>
             ) : (
               // Step 2: Athlete Selection
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Left Panel - Selected Athletes */}
-                <div className="space-y-6">
-                  {/* Selected Athletes Display */}
-                  <Card className="shadow-sm">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg">Atlet Terpilih</CardTitle>
-                      {groupGender && (
-                        <Badge variant="outline" className="w-fit">
-                          Kelompok: {groupGender}
-                        </Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+              <div className="space-y-6">
+                {/* Selected Athletes Display - Top Section */}
+                <Card className="shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-lg">Atlet Terpilih</CardTitle>
+                    {groupGender && (
+                      <Badge variant="outline" className="w-fit">
+                        Kelompok: {groupGender}
+                      </Badge>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {/* Red Corner */}
                       <div 
                         className={cn(
@@ -1097,70 +1098,46 @@ export default function Tournament() {
                           <p className="text-sm text-gray-500 italic">Belum ada atlet di antrian</p>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Navigation Buttons */}
-                  <div className="flex justify-between gap-3">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setCreateGroupStep('info')}
-                    >
-                      Kembali
-                    </Button>
-                    <div className="flex gap-3">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => {
-                          resetCreateAthleteGroupDialog();
-                          setShowCreateAthleteGroup(false);
-                        }}
-                      >
-                        Batal
-                      </Button>
-                      <Button 
-                        onClick={() => {
-                          if (!groupFormData) return;
-                          
-                          const athleteGroupData = {
-                            subCategoryId: selectedSubCategory!.id,
-                            name: groupFormData.name,
-                            description: groupFormData.description,
-                            matchNumber: parseInt(groupFormData.matchNumber),
-                            isActive: true
-                          };
-
-                          createAthleteGroupMutation.mutate({
-                            groupData: athleteGroupData,
-                            redCornerAthleteId: selectedRedCorner?.id || null,
-                            blueCornerAthleteId: selectedBlueCorner?.id || null,
-                            queueAthleteIds: selectedQueue.map(a => a.id)
-                          });
-                        }}
-                        disabled={createAthleteGroupMutation.isPending || (!selectedRedCorner && !selectedBlueCorner)}
-                      >
-                        {createAthleteGroupMutation.isPending ? 'Membuat...' : 'Buat Kelompok'}
-                      </Button>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
-                {/* Right Panel - Athlete Selection */}
-                <div>
-                  <Card className="shadow-sm h-full">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg">Pilih Atlet Sudut</CardTitle>
-                      {groupGender && (
-                        <p className="text-sm text-gray-600">
-                          Hanya menampilkan atlet {groupGender} (gender otomatis dipilih berdasarkan atlet pertama)
-                        </p>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Search and Filter */}
-                      <div className="space-y-3">
+                {/* Bottom Section - Filter and Athlete List */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left Panel - Filters */}
+                  <div className="lg:col-span-1">
+                    <Card className="shadow-sm">
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">Filter Pencarian</CardTitle>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="h-8"
+                          >
+                            {showFilters ? (
+                              <>
+                                <ChevronUp className="h-4 w-4 mr-1" />
+                                Sembunyikan
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                Tampilkan Filter
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        {groupGender && (
+                          <p className="text-sm text-gray-600">
+                            Filter otomatis untuk {groupGender}
+                          </p>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Search */}
                         <div className="relative">
                           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                           <Input
@@ -1170,152 +1147,174 @@ export default function Tournament() {
                             className="pl-10"
                           />
                         </div>
-                        
-                        <div className="grid grid-cols-1 gap-2">
-                          <Select value={athleteFilter.belt} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, belt: value }))}>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Semua Sabuk" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Semua Sabuk</SelectItem>
-                              {uniqueBelts.map(belt => (
-                                <SelectItem key={belt} value={belt}>{belt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          
-                          <Select 
-                            value={athleteFilter.gender} 
-                            onValueChange={(value) => {
-                              if (!groupGender) {
-                                setAthleteFilter(prev => ({ ...prev, gender: value }));
-                              }
-                            }}
-                            disabled={!!groupGender}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={groupGender || "Semua Gender"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Semua Gender</SelectItem>
-                              <SelectItem value="Laki-laki">Laki-laki</SelectItem>
-                              <SelectItem value="Perempuan">Perempuan</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          
-                          <Select value={athleteFilter.dojang} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, dojang: value }))}>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Semua Dojang" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Semua Dojang</SelectItem>
-                              {uniqueDojangs.map(dojang => (
-                                <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
 
-                          {/* Age Range Filter */}
-                          <div className="grid grid-cols-2 gap-1">
-                            <Input
-                              placeholder="Umur min"
-                              type="number"
-                              value={ageRange.min}
-                              onChange={(e) => setAgeRange(prev => ({ ...prev, min: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                            <Input
-                              placeholder="Umur max"
-                              type="number"
-                              value={ageRange.max}
-                              onChange={(e) => setAgeRange(prev => ({ ...prev, max: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                          </div>
-
-                          {/* Weight Range Filter */}
-                          <div className="grid grid-cols-2 gap-1">
-                            <Input
-                              placeholder="Berat min (kg)"
-                              type="number"
-                              step="0.1"
-                              value={weightRange.min}
-                              onChange={(e) => setWeightRange(prev => ({ ...prev, min: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                            <Input
-                              placeholder="Berat max (kg)"
-                              type="number"
-                              step="0.1"
-                              value={weightRange.max}
-                              onChange={(e) => setWeightRange(prev => ({ ...prev, max: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                          </div>
-
-                          {/* Height Range Filter */}
-                          <div className="grid grid-cols-2 gap-1">
-                            <Input
-                              placeholder="Tinggi min (cm)"
-                              type="number"
-                              step="0.1"
-                              value={heightRange.min}
-                              onChange={(e) => setHeightRange(prev => ({ ...prev, min: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                            <Input
-                              placeholder="Tinggi max (cm)"
-                              type="number"
-                              step="0.1"
-                              value={heightRange.max}
-                              onChange={(e) => setHeightRange(prev => ({ ...prev, max: e.target.value }))}
-                              className="h-9 text-xs"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="text-xs text-gray-600 flex items-center justify-between">
-                          <span>Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet</span>
-                          {(athleteFilter.belt !== 'all' || athleteFilter.dojang !== 'all' || athleteSearchQuery || 
-                            ageRange.min || ageRange.max || weightRange.min || weightRange.max || 
-                            heightRange.min || heightRange.max) && !groupGender && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setAthleteSearchQuery('');
-                                setAthleteFilter({ belt: 'all', gender: groupGender || 'all', dojang: 'all' });
-                                setAgeRange({min: '', max: ''});
-                                setWeightRange({min: '', max: ''});
-                                setHeightRange({min: '', max: ''});
+                        {/* Filter Options - Collapsible */}
+                        {showFilters && (
+                          <div className="space-y-3 border-t pt-3">
+                            <Select value={athleteFilter.belt} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, belt: value }))}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Semua Sabuk" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Semua Sabuk</SelectItem>
+                                {uniqueBelts.map(belt => (
+                                  <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            
+                            <Select 
+                              value={athleteFilter.gender} 
+                              onValueChange={(value) => {
+                                if (!groupGender) {
+                                  setAthleteFilter(prev => ({ ...prev, gender: value }));
+                                }
                               }}
-                              className="h-6 text-xs"
+                              disabled={!!groupGender}
                             >
-                              Reset Filter
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder={groupGender || "Semua Gender"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Semua Gender</SelectItem>
+                                <SelectItem value="Laki-laki">Laki-laki</SelectItem>
+                                <SelectItem value="Perempuan">Perempuan</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            
+                            <Select value={athleteFilter.dojang} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, dojang: value }))}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Semua Dojang" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Semua Dojang</SelectItem>
+                                {uniqueDojangs.map(dojang => (
+                                  <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
 
-                      {/* Athletes List */}
-                      <div className="max-h-96 overflow-y-auto border rounded-lg">
-                        {filteredAthletes.length === 0 ? (
-                          <div className="text-center py-8 text-gray-500">
-                            <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                            <p className="text-sm">Tidak ada atlet yang sesuai dengan kriteria pencarian</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 p-3">
-                            <div className="text-center py-4 text-gray-500 bg-gray-50 rounded border-2 border-dashed">
-                              <p className="text-sm">
-                                {!selectedRedCorner && !selectedBlueCorner 
-                                  ? "Klik atlet untuk mengisi sudut merah terlebih dahulu" 
-                                  : !selectedBlueCorner
-                                  ? "Klik atlet untuk mengisi sudut biru"
-                                  : "Klik atlet untuk menambah ke antrian"}
-                              </p>
+                            {/* Age Range Filter */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-600">Rentang Umur</Label>
+                              <div className="grid grid-cols-2 gap-1">
+                                <Input
+                                  placeholder="Min"
+                                  type="number"
+                                  value={ageRange.min}
+                                  onChange={(e) => setAgeRange(prev => ({ ...prev, min: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                                <Input
+                                  placeholder="Max"
+                                  type="number"
+                                  value={ageRange.max}
+                                  onChange={(e) => setAgeRange(prev => ({ ...prev, max: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
                             </div>
+
+                            {/* Weight Range Filter */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-600">Rentang Berat (kg)</Label>
+                              <div className="grid grid-cols-2 gap-1">
+                                <Input
+                                  placeholder="Min"
+                                  type="number"
+                                  step="0.1"
+                                  value={weightRange.min}
+                                  onChange={(e) => setWeightRange(prev => ({ ...prev, min: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                                <Input
+                                  placeholder="Max"
+                                  type="number"
+                                  step="0.1"
+                                  value={weightRange.max}
+                                  onChange={(e) => setWeightRange(prev => ({ ...prev, max: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Height Range Filter */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-600">Rentang Tinggi (cm)</Label>
+                              <div className="grid grid-cols-2 gap-1">
+                                <Input
+                                  placeholder="Min"
+                                  type="number"
+                                  step="0.1"
+                                  value={heightRange.min}
+                                  onChange={(e) => setHeightRange(prev => ({ ...prev, min: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                                <Input
+                                  placeholder="Max"
+                                  type="number"
+                                  step="0.1"
+                                  value={heightRange.max}
+                                  onChange={(e) => setHeightRange(prev => ({ ...prev, max: e.target.value }))}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Reset Filter Button */}
+                            {(athleteFilter.belt !== 'all' || athleteFilter.dojang !== 'all' || athleteSearchQuery || 
+                              ageRange.min || ageRange.max || weightRange.min || weightRange.max || 
+                              heightRange.min || heightRange.max) && !groupGender && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setAthleteSearchQuery('');
+                                  setAthleteFilter({ belt: 'all', gender: groupGender || 'all', dojang: 'all' });
+                                  setAgeRange({min: '', max: ''});
+                                  setWeightRange({min: '', max: ''});
+                                  setHeightRange({min: '', max: ''});
+                                }}
+                                className="w-full h-8 text-xs"
+                              >
+                                Reset Semua Filter
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Filter Summary */}
+                        <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                          <span>Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Right Panel - Athlete List */}
+                  <div className="lg:col-span-2">
+                    <Card className="shadow-sm h-full">
+                      <CardHeader className="pb-4">
+                        <CardTitle className="text-lg">Daftar Atlet</CardTitle>
+                        <p className="text-sm text-gray-600">
+                          {!selectedRedCorner && !selectedBlueCorner 
+                            ? "Klik atlet untuk mengisi sudut merah terlebih dahulu" 
+                            : !selectedBlueCorner
+                            ? "Klik atlet untuk mengisi sudut biru"
+                            : "Klik atlet untuk menambah ke antrian"}
+                        </p>
+                      </CardHeader>
+                      <CardContent>
+                        {/* Athletes List */}
+                        <div className="max-h-96 overflow-y-auto border rounded-lg">
+                          {filteredAthletes.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                              <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                              <p className="text-sm">Tidak ada atlet yang sesuai dengan kriteria pencarian</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 p-3">
                             {filteredAthletes.map(athlete => (
                               <div 
                                 key={athlete.id} 
@@ -1351,6 +1350,53 @@ export default function Tournament() {
                   </Card>
                 </div>
               </div>
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between gap-3">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setCreateGroupStep('info')}
+                >
+                  Kembali
+                </Button>
+                <div className="flex gap-3">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      resetCreateAthleteGroupDialog();
+                      setShowCreateAthleteGroup(false);
+                    }}
+                  >
+                    Batal
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      if (!groupFormData) return;
+                      
+                      const athleteGroupData = {
+                        subCategoryId: selectedSubCategory!.id,
+                        name: groupFormData.name,
+                        description: groupFormData.description,
+                        matchNumber: parseInt(groupFormData.matchNumber),
+                        isActive: true
+                      };
+
+                      createAthleteGroupMutation.mutate({
+                        groupData: athleteGroupData,
+                        redCornerAthleteId: selectedRedCorner?.id || null,
+                        blueCornerAthleteId: selectedBlueCorner?.id || null,
+                        queueAthleteIds: selectedQueue.map(a => a.id)
+                      });
+                    }}
+                    disabled={createAthleteGroupMutation.isPending || (!selectedRedCorner && !selectedBlueCorner)}
+                  >
+                    {createAthleteGroupMutation.isPending ? 'Membuat...' : 'Buat Kelompok'}
+                  </Button>
+                </div>
+              </div>
+            </div>
             )}
 
             {/* Context Menu */}

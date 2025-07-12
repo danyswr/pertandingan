@@ -37,9 +37,11 @@ export default function Tournament() {
   
   // Dialog states
   const [showCreateMainCategory, setShowCreateMainCategory] = useState(false);
+  const [showEditMainCategory, setShowEditMainCategory] = useState(false);
   const [showCreateSubCategory, setShowCreateSubCategory] = useState(false);
   const [showCreateAthleteGroup, setShowCreateAthleteGroup] = useState(false);
   const [showAddAthlete, setShowAddAthlete] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<MainCategory | null>(null);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -88,6 +90,30 @@ export default function Tournament() {
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal membuat kategori utama", variant: "destructive" });
+    },
+  });
+
+  const updateMainCategoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertMainCategory> }) => api.updateMainCategory(id, data),
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Kategori utama berhasil diperbarui" });
+      setShowEditMainCategory(false);
+      setEditingCategory(null);
+      queryClient.invalidateQueries({ queryKey: ['main-categories'] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal memperbarui kategori utama", variant: "destructive" });
+    },
+  });
+
+  const deleteMainCategoryMutation = useMutation({
+    mutationFn: api.deleteMainCategory,
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Kategori utama berhasil dihapus" });
+      queryClient.invalidateQueries({ queryKey: ['main-categories'] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal menghapus kategori utama", variant: "destructive" });
     },
   });
 
@@ -148,6 +174,28 @@ export default function Tournament() {
       description: formData.get('description') as string,
     };
     createMainCategoryMutation.mutate(data);
+  };
+
+  const handleEditMainCategory = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    const formData = new FormData(e.currentTarget);
+    const data: Partial<InsertMainCategory> = {
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+    };
+    updateMainCategoryMutation.mutate({ id: editingCategory.id, data });
+  };
+
+  const handleDeleteMainCategory = (category: MainCategory) => {
+    if (window.confirm(`Apakah Anda yakin ingin menghapus kategori "${category.name}"?`)) {
+      deleteMainCategoryMutation.mutate(category.id);
+    }
+  };
+
+  const openEditDialog = (category: MainCategory) => {
+    setEditingCategory(category);
+    setShowEditMainCategory(true);
   };
 
   const handleCreateSubCategory = (e: React.FormEvent<HTMLFormElement>) => {
@@ -254,15 +302,66 @@ export default function Tournament() {
             </form>
           </DialogContent>
         </Dialog>
+        
+        {/* Edit Main Category Dialog */}
+        <Dialog open={showEditMainCategory} onOpenChange={setShowEditMainCategory}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Kategori Utama</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditMainCategory} className="space-y-4">
+              <div>
+                <Label htmlFor="editName">Nama Kategori</Label>
+                <Input 
+                  id="editName" 
+                  name="name" 
+                  placeholder="Contoh: Kyorugi, Poomsae" 
+                  defaultValue={editingCategory?.name || ''} 
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="editDescription">Deskripsi</Label>
+                <Textarea 
+                  id="editDescription" 
+                  name="description" 
+                  placeholder="Deskripsi kategori..." 
+                  defaultValue={editingCategory?.description || ''} 
+                />
+              </div>
+              <Button type="submit" className="w-full">
+                Perbarui Kategori
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {mainCategories.map((category) => (
-          <Card key={category.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card key={category.id} className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-yellow-500" />
-                {category.name}
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  {category.name}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEditDialog(category)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteMainCategory(category)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>

@@ -250,6 +250,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Helper function to sync tournament data to Google Sheets
+  async function syncTournamentToGoogleSheets(action: string, data: any) {
+    try {
+      console.log(`Syncing tournament data to Google Sheets: ${action}`);
+
+      const postData = new URLSearchParams({
+        action: action,
+        ...data
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: postData.toString(),
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`Google Sheets tournament sync error: ${responseText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseText = await response.text();
+      console.log(`Google Sheets tournament sync response: ${responseText}`);
+
+      try {
+        const result = JSON.parse(responseText);
+        console.log('Google Sheets tournament sync result:', result);
+        return result;
+      } catch (parseError) {
+        console.error('Failed to parse Google Sheets response:', parseError);
+        return { success: false, error: 'Invalid response format' };
+      }
+    } catch (error) {
+      console.error('Failed to sync tournament data to Google Sheets:', error);
+      throw error;
+    }
+  }
+
   // Dashboard routes
   app.get('/api/dashboard/stats', async (req, res) => {
     try {
@@ -621,6 +669,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const category = await storage.createMainCategory(validatedData);
       broadcast({ type: 'main_category_created', data: category });
       res.json(category);
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('createMainCategory', {
+        id: category.id.toString(),
+        name: category.name
+      }).catch(error => {
+        console.error('Failed to sync main category to Google Sheets:', error);
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid main category data', details: error.errors });
@@ -637,6 +693,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const category = await storage.updateMainCategory(id, validatedData);
       broadcast({ type: 'main_category_updated', data: category });
       res.json(category);
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('updateMainCategory', {
+        id: category.id.toString(),
+        name: category.name
+      }).catch(error => {
+        console.error('Failed to sync main category update to Google Sheets:', error);
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid main category data', details: error.errors });
@@ -652,6 +716,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteMainCategory(id);
       broadcast({ type: 'main_category_deleted', data: { id } });
       res.json({ success: true });
+      
+      // Sync to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('deleteMainCategory', {
+        id: id.toString()
+      }).catch(error => {
+        console.error('Failed to sync main category deletion to Google Sheets:', error);
+      });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete main category' });
     }

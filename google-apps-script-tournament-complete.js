@@ -1,4 +1,4 @@
-// Google Apps Script yang sudah diperbaiki untuk Spreadsheet Manajemen
+// Google Apps Script yang lengkap untuk Spreadsheet Manajemen Taekwondo Tournament
 // Copy kode ini ke Google Apps Script dan deploy sebagai Web App
 
 function doPost(e) {

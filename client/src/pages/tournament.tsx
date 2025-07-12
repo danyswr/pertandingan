@@ -869,7 +869,9 @@ export default function Tournament() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Semua Gender</SelectItem>
-                            {uniqueGenders.map(gender => (
+                            <SelectItem value="Laki-laki">Laki-laki</SelectItem>
+                            <SelectItem value="Perempuan">Perempuan</SelectItem>
+                            {uniqueGenders.filter(gender => gender !== 'Laki-laki' && gender !== 'Perempuan').map(gender => (
                               <SelectItem key={gender} value={gender}>{gender}</SelectItem>
                             ))}
                           </SelectContent>

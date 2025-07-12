@@ -16,18 +16,17 @@ function doPost(e) {
         sheet.getRange(1, 1, 1, 2).setValues([['id_kategori', 'nama_kategori']]);
       }
       
-      const data = sheet.getDataRange().getValues();
-      const nextId = data.length; // Header row is 1, so next ID starts from data.length
-      
-      const rowData = [nextId, params.name];
+      // Use the ID provided by the application
+      const categoryId = parseInt(params.id);
+      const rowData = [categoryId, params.name];
       sheet.appendRow(rowData);
       
-      console.log('Main category created:', params.name);
+      console.log('Main category created:', params.name, 'with ID:', categoryId);
       return ContentService
         .createTextOutput(JSON.stringify({
           success: true, 
           message: 'Main category created successfully',
-          id: nextId,
+          id: categoryId,
           name: params.name
         }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -41,18 +40,17 @@ function doPost(e) {
         sheet.getRange(1, 1, 1, 4).setValues([['id_subkategori', 'id_kategori_utama', 'Nomor', 'judul_subkategori']]);
       }
       
-      const data = sheet.getDataRange().getValues();
-      const nextId = data.length; // Header row is 1, so next ID starts from data.length
-      
-      const rowData = [nextId, parseInt(params.mainCategoryId), parseInt(params.order), params.name];
+      // Use the ID provided by the application
+      const subCategoryId = parseInt(params.id);
+      const rowData = [subCategoryId, parseInt(params.mainCategoryId), parseInt(params.order), params.name];
       sheet.appendRow(rowData);
       
-      console.log('Sub category created:', params.name);
+      console.log('Sub category created:', params.name, 'with ID:', subCategoryId);
       return ContentService
         .createTextOutput(JSON.stringify({
           success: true, 
           message: 'Sub category created successfully',
-          id: nextId,
+          id: subCategoryId,
           mainCategoryId: parseInt(params.mainCategoryId),
           order: parseInt(params.order),
           name: params.name
@@ -68,10 +66,9 @@ function doPost(e) {
         sheet.getRange(1, 1, 1, 5).setValues([['id_kel', 'id_SubKelompok', 'Judul', 'Nomor', 'Keterangan']]);
       }
       
-      const data = sheet.getDataRange().getValues();
-      const nextId = data.length; // Header row is 1, so next ID starts from data.length
-      
-      const rowData = [nextId, parseInt(params.subCategoryId), params.name, 1, params.description || ''];
+      // Use the ID provided by the application
+      const groupId = parseInt(params.id);
+      const rowData = [groupId, parseInt(params.subCategoryId), params.name, 1, params.description || ''];
       sheet.appendRow(rowData);
       
       console.log('Athlete group created:', params.name);

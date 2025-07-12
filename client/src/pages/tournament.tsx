@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { api } from "@/lib/api";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X, MoreVertical } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X, MoreVertical, Search, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { 
   MainCategory, 
@@ -47,6 +47,16 @@ export default function Tournament() {
   const [editingCategory, setEditingCategory] = useState<MainCategory | null>(null);
   const [editingSubCategory, setEditingSubCategory] = useState<SubCategory | null>(null);
   const [editingGroup, setEditingGroup] = useState<AthleteGroup | null>(null);
+  
+  // Enhanced create athlete group states
+  const [selectedRedCorner, setSelectedRedCorner] = useState<Athlete | null>(null);
+  const [selectedBlueCorner, setSelectedBlueCorner] = useState<Athlete | null>(null);
+  const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
+  const [athleteFilter, setAthleteFilter] = useState({
+    belt: '',
+    gender: '',
+    dojang: ''
+  });
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -84,6 +94,31 @@ export default function Tournament() {
     queryKey: ['athletes'],
     queryFn: api.getAthletes,
   });
+
+  // Filter athletes based on search and filter criteria
+  const filteredAthletes = allAthletes.filter(athlete => {
+    const matchesSearch = athlete.name.toLowerCase().includes(athleteSearchQuery.toLowerCase()) ||
+                         athlete.dojang.toLowerCase().includes(athleteSearchQuery.toLowerCase());
+    const matchesBelt = !athleteFilter.belt || athlete.belt === athleteFilter.belt;
+    const matchesGender = !athleteFilter.gender || athlete.gender === athleteFilter.gender;
+    const matchesDojang = !athleteFilter.dojang || athlete.dojang === athleteFilter.dojang;
+    
+    return matchesSearch && matchesBelt && matchesGender && matchesDojang;
+  });
+
+  // Get unique values for filters
+  const uniqueBelts = [...new Set(allAthletes.map(a => a.belt))];
+  const uniqueGenders = [...new Set(allAthletes.map(a => a.gender))];
+  const uniqueDojangs = [...new Set(allAthletes.map(a => a.dojang))];
+
+  // Reset dialog states when closing
+  const resetCreateAthleteGroupDialog = () => {
+    setShowCreateAthleteGroup(false);
+    setSelectedRedCorner(null);
+    setSelectedBlueCorner(null);
+    setAthleteSearchQuery('');
+    setAthleteFilter({ belt: '', gender: '', dojang: '' });
+  };
 
   // Mutations
   const createMainCategoryMutation = useMutation({
@@ -137,11 +172,35 @@ export default function Tournament() {
   });
 
   const createAthleteGroupMutation = useMutation({
-    mutationFn: api.createAthleteGroup,
+    mutationFn: async (data: any) => {
+      // Create the athlete group first
+      const group = await api.createAthleteGroup(data.groupData);
+      
+      // Add red corner athlete if selected
+      if (data.redCornerAthleteId) {
+        await api.addAthleteToGroup({
+          groupId: group.id,
+          athleteId: data.redCornerAthleteId,
+          position: 'red'
+        });
+      }
+      
+      // Add blue corner athlete if selected
+      if (data.blueCornerAthleteId) {
+        await api.addAthleteToGroup({
+          groupId: group.id,
+          athleteId: data.blueCornerAthleteId,
+          position: 'blue'
+        });
+      }
+      
+      return group;
+    },
     onSuccess: () => {
-      toast({ title: "Berhasil", description: "Kelompok atlet berhasil dibuat" });
-      setShowCreateAthleteGroup(false);
+      toast({ title: "Berhasil", description: "Kelompok atlet berhasil dibuat dengan atlet sudut" });
+      resetCreateAthleteGroupDialog();
       queryClient.invalidateQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
+      queryClient.invalidateQueries({ queryKey: ['group-athletes'] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal membuat kelompok atlet", variant: "destructive" });
@@ -282,13 +341,19 @@ export default function Tournament() {
   const handleCreateAthleteGroup = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const data: InsertAthleteGroup = {
+    
+    const groupData: InsertAthleteGroup = {
       subCategoryId: selectedSubCategory!.id,
       name: formData.get('name') as string,
       description: formData.get('description') as string,
       matchNumber: parseInt(formData.get('matchNumber') as string) || 1,
     };
-    createAthleteGroupMutation.mutate(data);
+    
+    createAthleteGroupMutation.mutate({
+      groupData,
+      redCornerAthleteId: selectedRedCorner?.id,
+      blueCornerAthleteId: selectedBlueCorner?.id,
+    });
   };
 
   const handleEditAthleteGroup = (e: React.FormEvent<HTMLFormElement>) => {
@@ -609,33 +674,232 @@ export default function Tournament() {
       </div>
 
       <div className="flex justify-end">
-        <Dialog open={showCreateAthleteGroup} onOpenChange={setShowCreateAthleteGroup}>
+        <Dialog open={showCreateAthleteGroup} onOpenChange={resetCreateAthleteGroupDialog}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Buat Kelompok
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Buat Kelompok Atlet</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateAthleteGroup} className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nama Kelompok</Label>
-                <Input id="name" name="name" placeholder="Contoh: Kelompok A, Final" required />
+            <form onSubmit={handleCreateAthleteGroup} className="space-y-6">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="name">Nama Kelompok</Label>
+                  <Input 
+                    id="name" 
+                    name="name" 
+                    placeholder="Contoh: Kelompok A, Final" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="matchNumber">Nomor Partai</Label>
+                  <Input 
+                    id="matchNumber" 
+                    name="matchNumber" 
+                    type="number" 
+                    placeholder="1" 
+                    min="1" 
+                    required 
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="matchNumber">Nomor Partai</Label>
-                <Input id="matchNumber" name="matchNumber" type="number" placeholder="1" min="1" required />
-              </div>
+              
               <div>
                 <Label htmlFor="description">Deskripsi</Label>
-                <Textarea id="description" name="description" placeholder="Deskripsi kelompok..." />
+                <Textarea 
+                  id="description" 
+                  name="description" 
+                  placeholder="Deskripsi kelompok..." 
+                  rows={3}
+                />
               </div>
-              <Button type="submit" className="w-full">
-                Buat Kelompok
-              </Button>
+
+              {/* Athlete Selection */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold mb-4">Pilih Atlet Sudut</h3>
+                
+                {/* Search and Filter */}
+                <div className="mb-4 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Cari atlet berdasarkan nama atau dojang..."
+                      value={athleteSearchQuery}
+                      onChange={(e) => setAthleteSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Select value={athleteFilter.belt} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, belt: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter Sabuk" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Semua Sabuk</SelectItem>
+                        {uniqueBelts.map(belt => (
+                          <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={athleteFilter.gender} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, gender: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter Gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Semua Gender</SelectItem>
+                        {uniqueGenders.map(gender => (
+                          <SelectItem key={gender} value={gender}>{gender}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={athleteFilter.dojang} onValueChange={(value) => setAthleteFilter(prev => ({ ...prev, dojang: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter Dojang" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Semua Dojang</SelectItem>
+                        {uniqueDojangs.map(dojang => (
+                          <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    Menampilkan {filteredAthletes.length} dari {allAthletes.length} atlet
+                  </div>
+                </div>
+
+                {/* Corner Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Red Corner */}
+                  <div className="border border-red-200 rounded-lg p-4">
+                    <h4 className="font-medium text-red-600 mb-3">Sudut Merah</h4>
+                    {selectedRedCorner ? (
+                      <div className="bg-red-50 p-3 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{selectedRedCorner.name}</p>
+                            <p className="text-sm text-gray-600">{selectedRedCorner.dojang}</p>
+                            <p className="text-sm text-gray-600">{selectedRedCorner.belt} • {selectedRedCorner.weight}kg</p>
+                          </div>
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setSelectedRedCorner(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">Belum dipilih</p>
+                    )}
+                  </div>
+
+                  {/* Blue Corner */}
+                  <div className="border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-600 mb-3">Sudut Biru</h4>
+                    {selectedBlueCorner ? (
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{selectedBlueCorner.name}</p>
+                            <p className="text-sm text-gray-600">{selectedBlueCorner.dojang}</p>
+                            <p className="text-sm text-gray-600">{selectedBlueCorner.belt} • {selectedBlueCorner.weight}kg</p>
+                          </div>
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setSelectedBlueCorner(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">Belum dipilih</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Athletes List */}
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Daftar Atlet</h4>
+                  <div className="max-h-80 overflow-y-auto border rounded-lg">
+                    {filteredAthletes.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        Tidak ada atlet yang sesuai dengan kriteria pencarian
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {filteredAthletes.map(athlete => (
+                          <div key={athlete.id} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium">{athlete.name}</p>
+                                <p className="text-sm text-gray-600">
+                                  {athlete.dojang} • {athlete.belt} • {athlete.gender} • {athlete.weight}kg
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-200 text-red-600 hover:bg-red-50"
+                                  onClick={() => setSelectedRedCorner(athlete)}
+                                  disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
+                                >
+                                  Sudut Merah
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                                  onClick={() => setSelectedBlueCorner(athlete)}
+                                  disabled={selectedRedCorner?.id === athlete.id || selectedBlueCorner?.id === athlete.id}
+                                >
+                                  Sudut Biru
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end gap-3 pt-6 border-t">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={resetCreateAthleteGroupDialog}
+                >
+                  Batal
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createAthleteGroupMutation.isPending}
+                >
+                  {createAthleteGroupMutation.isPending ? 'Membuat...' : 'Buat Kelompok'}
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -704,10 +968,10 @@ export default function Tournament() {
       }
     });
 
-  // Get unique values for filter options
-  const uniqueBelts = [...new Set(allAthletes.map(a => a.belt))].filter(belt => belt && belt.trim());
-  const uniqueGenders = [...new Set(allAthletes.map(a => a.gender))].filter(gender => gender && gender.trim());
-  const uniqueDojangs = [...new Set(allAthletes.map(a => a.dojang))].filter(dojang => dojang && dojang.trim());
+  // Get unique values for filter options (removing duplicate declaration)
+  const uniqueBeltsFromAll = [...new Set(allAthletes.map(a => a.belt))].filter(belt => belt && belt.trim());
+  const uniqueGendersFromAll = [...new Set(allAthletes.map(a => a.gender))].filter(gender => gender && gender.trim());
+  const uniqueDojangsFromAll = [...new Set(allAthletes.map(a => a.dojang))].filter(dojang => dojang && dojang.trim());
 
   const handleAthleteSelect = (athleteId: number) => {
     if (!selectedCorner || !selectedAthleteGroup) return;

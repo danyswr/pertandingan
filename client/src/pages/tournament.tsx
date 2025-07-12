@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Trophy, Users, Crown, X, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { 
   MainCategory, 
@@ -189,6 +190,20 @@ export default function Tournament() {
     },
   });
 
+  const updateAthleteGroupMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertAthleteGroup> }) =>
+      api.updateAthleteGroup(id, data),
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Kelompok atlet berhasil diperbarui" });
+      setShowEditAthleteGroup(false);
+      setEditingGroup(null);
+      queryClient.invalidateQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal memperbarui kelompok atlet", variant: "destructive" });
+    },
+  });
+
   // Handle form submissions
   const handleCreateMainCategory = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -241,6 +256,18 @@ export default function Tournament() {
       matchNumber: parseInt(formData.get('matchNumber') as string) || 1,
     };
     createAthleteGroupMutation.mutate(data);
+  };
+
+  const handleEditAthleteGroup = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingGroup) return;
+    const formData = new FormData(e.currentTarget);
+    const data: Partial<InsertAthleteGroup> = {
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+      matchNumber: parseInt(formData.get('matchNumber') as string) || 1,
+    };
+    updateAthleteGroupMutation.mutate({ id: editingGroup.id, data });
   };
 
   const handleAddAthlete = (e: React.FormEvent<HTMLFormElement>) => {
@@ -575,7 +602,7 @@ export default function Tournament() {
     
     const position = selectedCorner;
     addAthleteMutation.mutate({
-      groupId: selectedAthleteGroup.id,
+      athleteGroupId: selectedAthleteGroup.id,
       athleteId,
       position,
       queueOrder: 1
@@ -633,6 +660,51 @@ export default function Tournament() {
               </form>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Athlete Group Dialog */}
+          <Dialog open={showEditAthleteGroup} onOpenChange={setShowEditAthleteGroup}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Kelompok Atlet</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleEditAthleteGroup} className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-name">Nama Kelompok</Label>
+                  <Input 
+                    id="edit-name" 
+                    name="name" 
+                    placeholder="Contoh: Grup A" 
+                    defaultValue={editingGroup?.name}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-description">Deskripsi</Label>
+                  <Textarea 
+                    id="edit-description" 
+                    name="description" 
+                    placeholder="Deskripsi kelompok (opsional)"
+                    defaultValue={editingGroup?.description || ''}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-matchNumber">Nomor Partai</Label>
+                  <Input 
+                    id="edit-matchNumber" 
+                    name="matchNumber" 
+                    type="number" 
+                    placeholder="1" 
+                    min="1" 
+                    defaultValue={editingGroup?.matchNumber}
+                    required 
+                  />
+                </div>
+                <Button type="submit" className="w-full">
+                  Perbarui Kelompok
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Vertical Layout of Match Groups */}
@@ -652,27 +724,37 @@ export default function Tournament() {
                       </CardTitle>
                       <p className="text-sm text-gray-600 mt-1">Partai #{group.matchNumber}</p>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedAthleteGroup(group);
-                          setEditingGroup(group);
-                          setShowEditAthleteGroup(true);
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => deleteAthleteGroupMutation.mutate(group.id)}
-                        disabled={deleteAthleteGroupMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="ghost">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedAthleteGroup(group);
+                            setEditingGroup(group);
+                            setShowEditAthleteGroup(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Kelompok
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (window.confirm(`Apakah Anda yakin ingin menghapus kelompok "${group.name}"?`)) {
+                              deleteAthleteGroupMutation.mutate(group.id);
+                            }
+                          }}
+                          disabled={deleteAthleteGroupMutation.isPending}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Hapus Kelompok
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardHeader>
                 <CardContent className="p-6">

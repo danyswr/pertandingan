@@ -92,6 +92,17 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-12 - Enhanced Search & Filter Features + Google Apps Script Fix (COMPLETED)
+- **Search & Filter Enhancement**: Added comprehensive search and filter functionality to tournament and matches pages
+  - Tournament page: Enhanced athlete selection with search by name, filter by belt/gender/dojang, and sorting options
+  - Matches page: Added search by athlete name, filter by status/ring, and improved match display
+  - Real-time filter count display showing available athletes and match statistics
+- **Google Apps Script Fix**: Fixed critical `nextId` undefined error in tournament management script
+  - Corrected variable reference in `createAthleteGroup` function (line 79)
+  - Created `google-apps-script-tournament-fixed-nextid.js` with proper error handling
+- **UX Improvements**: Added reset filters functionality and automatic filter clearing when dialogs close
+- **Performance**: Optimized filtering with client-side processing for instant results
+
 ### 2025-07-12 - Migration from Replit Agent to Standard Replit Environment (COMPLETED)
 - **Migration Completed**: Successfully migrated the complete Taekwondo Tournament Management System from Replit Agent to standard Replit environment
 - **Environment Verification**: Confirmed all packages installed correctly and workflow running properly on port 5000

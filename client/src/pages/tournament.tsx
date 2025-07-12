@@ -508,6 +508,10 @@ export default function Tournament() {
 
   const [selectedCorner, setSelectedCorner] = useState<'red' | 'blue' | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterBelt, setFilterBelt] = useState('');
+  const [filterGender, setFilterGender] = useState('');
+  const [filterDojang, setFilterDojang] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'weight' | 'belt'>('name');
 
   const redCorner = groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated);
   const blueCorner = groupAthletes.find(ga => ga.position === 'blue' && !ga.isEliminated);
@@ -515,10 +519,31 @@ export default function Tournament() {
   const eliminated = groupAthletes.filter(ga => ga.isEliminated);
 
   // Filter athletes for selection
-  const availableAthletes = allAthletes.filter(athlete => 
-    !groupAthletes.find(ga => ga.athleteId === athlete.id) &&
-    athlete.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const availableAthletes = allAthletes
+    .filter(athlete => 
+      !groupAthletes.find(ga => ga.athleteId === athlete.id) &&
+      athlete.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (filterBelt === '' || athlete.belt === filterBelt) &&
+      (filterGender === '' || athlete.gender === filterGender) &&
+      (filterDojang === '' || athlete.dojang === filterDojang) &&
+      athlete.isPresent // Only show present athletes
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'weight':
+          return a.weight - b.weight;
+        case 'belt':
+          return a.belt.localeCompare(b.belt);
+        case 'name':
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+
+  // Get unique values for filter options
+  const uniqueBelts = [...new Set(allAthletes.map(a => a.belt))].filter(Boolean);
+  const uniqueGenders = [...new Set(allAthletes.map(a => a.gender))].filter(Boolean);
+  const uniqueDojangs = [...new Set(allAthletes.map(a => a.dojang))].filter(Boolean);
 
   const handleAthleteSelect = (athleteId: number) => {
     if (!selectedCorner) return;
@@ -531,8 +556,13 @@ export default function Tournament() {
       queueOrder: 1
     });
     
+    // Reset dialog state
     setSelectedCorner(null);
     setSearchTerm('');
+    setFilterBelt('');
+    setFilterGender('');
+    setFilterDojang('');
+    setSortBy('name');
   };
 
   const renderGroupAthletes = () => {
@@ -661,7 +691,14 @@ export default function Tournament() {
         </div>
 
         {/* Athlete Selection Modal */}
-        <Dialog open={!!selectedCorner} onOpenChange={() => setSelectedCorner(null)}>
+        <Dialog open={!!selectedCorner} onOpenChange={() => {
+          setSelectedCorner(null);
+          setSearchTerm('');
+          setFilterBelt('');
+          setFilterGender('');
+          setFilterDojang('');
+          setSortBy('name');
+        }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
@@ -678,6 +715,88 @@ export default function Tournament() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="mt-1"
                 />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Filter Sabuk</Label>
+                  <Select value={filterBelt} onValueChange={setFilterBelt}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Semua Sabuk" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua Sabuk</SelectItem>
+                      {uniqueBelts.map(belt => (
+                        <SelectItem key={belt} value={belt}>{belt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label>Filter Gender</Label>
+                  <Select value={filterGender} onValueChange={setFilterGender}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Semua Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua Gender</SelectItem>
+                      {uniqueGenders.map(gender => (
+                        <SelectItem key={gender} value={gender}>{gender}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Filter Dojang</Label>
+                  <Select value={filterDojang} onValueChange={setFilterDojang}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Semua Dojang" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Semua Dojang</SelectItem>
+                      {uniqueDojangs.map(dojang => (
+                        <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label>Urutkan</Label>
+                  <Select value={sortBy} onValueChange={(value: 'name' | 'weight' | 'belt') => setSortBy(value)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Nama</SelectItem>
+                      <SelectItem value="weight">Berat Badan</SelectItem>
+                      <SelectItem value="belt">Sabuk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterBelt('');
+                    setFilterGender('');
+                    setFilterDojang('');
+                    setSortBy('name');
+                  }}
+                >
+                  Reset Filter
+                </Button>
+                <Badge variant="secondary">
+                  {availableAthletes.length} atlet tersedia
+                </Badge>
               </div>
               
               <div className="max-h-96 overflow-y-auto space-y-2">

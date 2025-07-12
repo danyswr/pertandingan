@@ -5,15 +5,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { api } from "@/lib/api";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
+import { Search, Filter, Trophy, Clock } from "lucide-react";
 import type { Match, ActiveMatch, Athlete } from "@shared/schema";
 
 export default function Matches() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedRing, setSelectedRing] = useState("A");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterRing, setFilterRing] = useState("");
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -126,13 +132,27 @@ export default function Matches() {
     createMatchMutation.mutate(matchData);
   };
 
+  // Filter matches based on search and filter criteria
+  const filteredMatches = (allMatches || [])
+    .filter(match => {
+      const redAthlete = athletes?.find(a => a.id === match.redCornerAthleteId);
+      const blueAthlete = athletes?.find(a => a.id === match.blueCornerAthleteId);
+      
+      const matchText = `${redAthlete?.name || ''} ${blueAthlete?.name || ''}`.toLowerCase();
+      const searchMatch = searchTerm === '' || matchText.includes(searchTerm.toLowerCase());
+      const statusMatch = filterStatus === '' || match.status === filterStatus;
+      const ringMatch = filterRing === '' || match.ring === filterRing;
+      
+      return searchMatch && statusMatch && ringMatch;
+    });
+
   const isLoading = activeMatchesLoading || allMatchesLoading || declareWinnerMutation.isPending || createMatchMutation.isPending;
 
   const getMatchesByRing = (ring: string) => {
     return activeMatches?.filter(match => match.ring === ring) || [];
   };
 
-  const completedMatches = allMatches?.filter(match => match.status === 'completed') || [];
+  const completedMatches = filteredMatches.filter(match => match.status === 'completed');
 
   const renderMatchCard = (match: ActiveMatch, ring: string) => (
     <Card key={match.id}>
@@ -247,6 +267,90 @@ export default function Matches() {
       <LoadingOverlay isVisible={isLoading} />
       
       <main className="p-6">
+        {/* Search and Filter */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Cari dan Filter Pertandingan
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label>Cari Pertandingan</Label>
+                <Input
+                  placeholder="Nama atlet..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label>Status</Label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Semua Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Semua Status</SelectItem>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="completed">Selesai</SelectItem>
+                    <SelectItem value="scheduled">Dijadwalkan</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label>Ring</Label>
+                <Select value={filterRing} onValueChange={setFilterRing}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Semua Ring" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Semua Ring</SelectItem>
+                    <SelectItem value="A">Ring A</SelectItem>
+                    <SelectItem value="B">Ring B</SelectItem>
+                    <SelectItem value="C">Ring C</SelectItem>
+                    <SelectItem value="D">Ring D</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-end">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterStatus('');
+                    setFilterRing('');
+                  }}
+                  className="w-full"
+                >
+                  Reset Filter
+                </Button>
+              </div>
+            </div>
+            
+            <div className="mt-4 flex justify-between items-center">
+              <Badge variant="secondary">
+                {filteredMatches.length} pertandingan ditemukan
+              </Badge>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="bg-green-50 text-green-700">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {filteredMatches.filter(m => m.status === 'active').length} Aktif
+                </Badge>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                  <Trophy className="h-3 w-3 mr-1" />
+                  {filteredMatches.filter(m => m.status === 'completed').length} Selesai
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Rings */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Ring A */}

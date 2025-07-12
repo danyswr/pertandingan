@@ -20,7 +20,7 @@ const GOOGLE_SHEETS_CONFIG = {
 
 // Cache untuk mempercepat pengambilan data
 const dataCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_DURATION = 5000; // 5 detik (reduced for quicker updates)
+const CACHE_DURATION = 2000; // 2 detik (reduced for quicker updates)
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -104,6 +104,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Google Sheets API error:', error);
       throw new Error('Failed to fetch data from Google Sheets');
+    }
+  }
+
+  // Helper function to update attendance in Google Sheets
+  async function updateGoogleSheetsAttendance(athleteId: number, isPresent: boolean) {
+    try {
+      const athlete = await storage.getAthleteById(athleteId);
+      if (!athlete) {
+        throw new Error('Athlete not found');
+      }
+
+      const postData = new URLSearchParams({
+        action: 'updateAttendance',
+        athleteId: athleteId.toString(),
+        isPresent: isPresent.toString()
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+
+      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: postData.toString(),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Google Sheets attendance update result:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to update Google Sheets attendance:', error);
+      throw error;
     }
   }
 
@@ -339,51 +380,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let athlete = await storage.getAthleteById(id);
       
       if (!athlete) {
-        // If not found, try to sync from Google Sheets first
-        try {
-          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-            action: 'getAllData'
-          });
-          
-          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
-            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
-            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
-            if (athleteRow && athleteRow.length > 0) {
-              // Create the athlete in local storage
-              const athleteData = {
-                name: athleteRow[1] || '',
-                gender: athleteRow[2] || '',
-                birthDate: athleteRow[3] || '',
-                dojang: athleteRow[4] || '',
-                belt: athleteRow[5] || '',
-                weight: parseFloat(athleteRow[6]) || 0,
-                height: parseFloat(athleteRow[7]) || 0,
-                category: athleteRow[8] || '',
-                class: athleteRow[9] || '',
-                isPresent: isPresent,
-                status: 'available'
-              };
-              
-              athlete = await storage.createAthlete(athleteData);
-            }
-          }
-        } catch (syncError) {
-          console.error('Failed to sync athlete from Google Sheets:', syncError);
-        }
-      }
-      
-      if (!athlete) {
         return res.status(404).json({ error: 'Athlete not found' });
       }
       
-      // Update attendance
+      // Update attendance locally first for fast response
       athlete = await storage.updateAthleteAttendance(id, isPresent);
+      
+      // Send immediate response
+      broadcast({ type: 'athlete_attendance_updated', data: athlete });
+      res.json(athlete);
+      
+      // Sync to Google Sheets asynchronously (don't wait for it)
+      updateGoogleSheetsAttendance(id, isPresent).catch(error => {
+        console.error('Failed to sync attendance to Google Sheets:', error);
+      });
       
       // Clear cache to force fresh data on next fetch
       dataCache.clear();
       
-      broadcast({ type: 'athlete_attendance_updated', data: athlete });
-      res.json(athlete);
     } catch (error) {
       console.error('Attendance update error:', error);
       res.status(500).json({ error: 'Failed to update athlete attendance' });

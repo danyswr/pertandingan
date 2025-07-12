@@ -1,4 +1,4 @@
-// Google Apps Script yang lengkap untuk Spreadsheet Manajemen Taekwondo Tournament
+// Google Apps Script yang LENGKAP dengan CRUD operations untuk Tournament Management
 // Copy kode ini ke Google Apps Script dan deploy sebagai Web App
 
 function doPost(e) {
@@ -131,7 +131,7 @@ function doPost(e) {
       }
     }
     
-    // Handle tournament data operations
+    // ============ MAIN CATEGORY OPERATIONS ============
     if (params.action === 'createMainCategory') {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       let mainCategorySheet = spreadsheet.getSheetByName('Kategori_Utama');
@@ -178,28 +178,33 @@ function doPost(e) {
       
       if (id && name) {
         const data = mainCategorySheet.getDataRange().getValues();
+        
         for (let i = 1; i < data.length; i++) {
-          if (data[i][0] === id) {
+          if (data[i][0] == id) {
+            // Update the name in column B
             mainCategorySheet.getRange(i + 1, 2).setValue(name);
-            console.log('Main category updated:', name);
+            console.log('Main category updated:', id);
             
             return ContentService
               .createTextOutput(JSON.stringify({
                 success: true, 
                 message: 'Main category updated successfully',
-                id: id,
-                name: name
+                id: id
               }))
               .setMimeType(ContentService.MimeType.JSON);
           }
         }
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Main category not found'}))
+          .setMimeType(ContentService.MimeType.JSON);
       }
       
       return ContentService
-        .createTextOutput(JSON.stringify({success: false, message: 'Main category not found'}))
+        .createTextOutput(JSON.stringify({success: false, message: 'Invalid update data'}))
         .setMimeType(ContentService.MimeType.JSON);
     }
-    
+
     if (params.action === 'deleteMainCategory') {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       const mainCategorySheet = spreadsheet.getSheetByName('Kategori_Utama');
@@ -214,8 +219,9 @@ function doPost(e) {
       
       if (id) {
         const data = mainCategorySheet.getDataRange().getValues();
+        
         for (let i = 1; i < data.length; i++) {
-          if (data[i][0] === id) {
+          if (data[i][0] == id) {
             mainCategorySheet.deleteRow(i + 1);
             console.log('Main category deleted:', id);
             
@@ -235,6 +241,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // ============ SUB CATEGORY OPERATIONS ============
     if (params.action === 'createSubCategory') {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       let subCategorySheet = spreadsheet.getSheetByName('SubKategori');
@@ -357,6 +364,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // ============ ATHLETE GROUP OPERATIONS ============
     if (params.action === 'createAthleteGroup') {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       let athleteGroupSheet = spreadsheet.getSheetByName('Kelompok_Atlet');
@@ -483,6 +491,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // ============ GROUP ATHLETE OPERATIONS ============
     if (params.action === 'addAthleteToGroup') {
       const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       let groupListSheet = spreadsheet.getSheetByName('daftar_kelompok');
@@ -521,6 +530,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // ============ BATCH DATA OPERATIONS ============
     if (params.action === 'addData' && params.rowData) {
       // Parse data dari parameter
       const rowData = JSON.parse(params.rowData);
@@ -555,36 +565,39 @@ function doPost(e) {
             item.tinggi_badan,
             item.kategori,
             item.kelas,
-            item.isPresent,
-            item.status,
+            item.hadir || false,
+            item.status || 'active',
             new Date().toLocaleString('id-ID')
           ];
           
           sheet.appendRow(rowData);
           successCount++;
-          console.log('Added athlete:', item.nama_lengkap);
         } catch (error) {
-          console.error('Error adding athlete:', item.nama_lengkap, error);
+          console.error('Error processing item:', error, item);
         }
       }
+      
+      console.log('Batch processing complete:', successCount, 'successful');
       
       return ContentService
         .createTextOutput(JSON.stringify({
           success: true, 
-          message: `Batch transfer berhasil: ${successCount}/${batchData.length} atlet`,
-          count: successCount
+          message: `Batch data processing complete: ${successCount}/${batchData.length} successful`,
+          successCount: successCount,
+          totalCount: batchData.length
         }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // Default error response
     return ContentService
       .createTextOutput(JSON.stringify({success: false, message: 'Action tidak dikenal atau parameter tidak lengkap'}))
       .setMimeType(ContentService.MimeType.JSON);
-      
+    
   } catch (error) {
     console.error('Error in doPost:', error);
     return ContentService
-      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
+      .createTextOutput(JSON.stringify({success: false, message: 'Internal server error: ' + error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -594,46 +607,164 @@ function doGet(e) {
     const params = e.parameter;
     console.log('Received GET params:', JSON.stringify(params));
     
-    if (params.action === 'test') {
-      return ContentService
-        .createTextOutput(JSON.stringify({success: true, message: 'Google Apps Script bekerja dengan baik'}))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Get all data
+    // Get all data from sheet
     if (params.action === 'getAllData') {
-      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-      const sheet = spreadsheet.getSheetByName('atlets');
-      
+      let sheet = spreadsheet.getSheetByName('atlets');
       if (!sheet) {
+        console.log('Sheet "atlets" not found');
         return ContentService
-          .createTextOutput(JSON.stringify({success: false, message: 'Sheet atlets tidak ditemukan'}))
+          .createTextOutput(JSON.stringify({success: false, message: 'Sheet not found'}))
           .setMimeType(ContentService.MimeType.JSON);
       }
       
-      const data = sheet.getDataRange().getValues();
-      return ContentService
-        .createTextOutput(JSON.stringify({success: true, data: data}))
-        .setMimeType(ContentService.MimeType.JSON);
+      try {
+        const data = sheet.getDataRange().getValues();
+        console.log('Retrieved data rows:', data.length);
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: data}))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (error) {
+        console.error('Error reading sheet data:', error);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Error reading data: ' + error.toString()}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Get tournament main categories
+    if (params.action === 'getMainCategories') {
+      let mainCategorySheet = spreadsheet.getSheetByName('Kategori_Utama');
+      if (!mainCategorySheet) {
+        console.log('Creating new Kategori_Utama sheet');
+        mainCategorySheet = spreadsheet.insertSheet('Kategori_Utama');
+        mainCategorySheet.getRange(1, 1, 1, 2).setValues([['id_kategori', 'nama_kategori']]);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: []}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      try {
+        const data = mainCategorySheet.getDataRange().getValues();
+        console.log('Retrieved main categories:', data.length - 1); // -1 for header
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: data}))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (error) {
+        console.error('Error reading main categories:', error);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Error reading main categories: ' + error.toString()}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Get sub categories
+    if (params.action === 'getSubCategories') {
+      const mainCategoryId = parseInt(params.mainCategoryId);
+      let subCategorySheet = spreadsheet.getSheetByName('SubKategori');
+      
+      if (!subCategorySheet) {
+        console.log('Creating new SubKategori sheet');
+        subCategorySheet = spreadsheet.insertSheet('SubKategori');
+        subCategorySheet.getRange(1, 1, 1, 4).setValues([['id_subkategori', 'id_kategori_utama', 'Nomor', 'judul_subkategori']]);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: []}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      try {
+        const data = subCategorySheet.getDataRange().getValues();
+        console.log('Retrieved sub categories:', data.length - 1); // -1 for header
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: data, mainCategoryId: mainCategoryId}))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (error) {
+        console.error('Error reading sub categories:', error);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Error reading sub categories: ' + error.toString()}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Get athlete groups
+    if (params.action === 'getAthleteGroups') {
+      const subCategoryId = parseInt(params.subCategoryId);
+      let athleteGroupSheet = spreadsheet.getSheetByName('Kelompok_Atlet');
+      
+      if (!athleteGroupSheet) {
+        console.log('Creating new Kelompok_Atlet sheet');
+        athleteGroupSheet = spreadsheet.insertSheet('Kelompok_Atlet');
+        athleteGroupSheet.getRange(1, 1, 1, 5).setValues([['id_kel', 'id_SubKelompok', 'Judul', 'Nomor', 'Keterangan']]);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: []}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      try {
+        const data = athleteGroupSheet.getDataRange().getValues();
+        console.log('Retrieved athlete groups:', data.length - 1); // -1 for header
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: data, subCategoryId: subCategoryId}))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (error) {
+        console.error('Error reading athlete groups:', error);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Error reading athlete groups: ' + error.toString()}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Get group athletes
+    if (params.action === 'getGroupAthletes') {
+      const groupId = parseInt(params.groupId);
+      let groupListSheet = spreadsheet.getSheetByName('daftar_kelompok');
+      
+      if (!groupListSheet) {
+        console.log('Creating new daftar_kelompok sheet');
+        groupListSheet = spreadsheet.insertSheet('daftar_kelompok');
+        groupListSheet.getRange(1, 1, 1, 9).setValues([['id_daftarKelompok', 'id_kelompokAtlet', 'nama_atlet', 'Berat_badan', 'Tinggi_badan', 'sabuk', 'umur', 'MB', 'Nomor']]);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: []}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      try {
+        const data = groupListSheet.getDataRange().getValues();
+        console.log('Retrieved group athletes:', data.length - 1); // -1 for header
+        
+        return ContentService
+          .createTextOutput(JSON.stringify({success: true, data: data, groupId: groupId}))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (error) {
+        console.error('Error reading group athletes:', error);
+        return ContentService
+          .createTextOutput(JSON.stringify({success: false, message: 'Error reading group athletes: ' + error.toString()}))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
     }
     
+    // Default response
     return ContentService
-      .createTextOutput(JSON.stringify({success: true, message: 'Google Apps Script aktif'}))
+      .createTextOutput(JSON.stringify({success: false, message: 'Action tidak dikenal'}))
       .setMimeType(ContentService.MimeType.JSON);
-      
+    
   } catch (error) {
     console.error('Error in doGet:', error);
     return ContentService
-      .createTextOutput(JSON.stringify({success: false, error: error.toString()}))
+      .createTextOutput(JSON.stringify({success: false, message: 'Internal server error: ' + error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// Fungsi untuk menginisialisasi semua sheet
 function initializeSheets() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Sheet atlets
+  // Initialize atlets sheet
   let atletsSheet = spreadsheet.getSheetByName('atlets');
   if (!atletsSheet) {
     atletsSheet = spreadsheet.insertSheet('atlets');
@@ -642,45 +773,37 @@ function initializeSheets() {
       'Sabuk', 'Berat Badan', 'Tinggi Badan', 'Kategori', 'Kelas', 
       'Hadir', 'Status', 'Waktu Input'
     ]]);
+    console.log('atlets sheet created');
   }
   
-  // Sheet Kategori_Utama
+  // Initialize tournament sheets
   let mainCategorySheet = spreadsheet.getSheetByName('Kategori_Utama');
   if (!mainCategorySheet) {
     mainCategorySheet = spreadsheet.insertSheet('Kategori_Utama');
-    mainCategorySheet.getRange(1, 1, 1, 2).setValues([[
-      'id_kategori', 'nama_kategori'
-    ]]);
+    mainCategorySheet.getRange(1, 1, 1, 2).setValues([['id_kategori', 'nama_kategori']]);
+    console.log('Kategori_Utama sheet created');
   }
   
-  // Sheet SubKategori
   let subCategorySheet = spreadsheet.getSheetByName('SubKategori');
   if (!subCategorySheet) {
     subCategorySheet = spreadsheet.insertSheet('SubKategori');
-    subCategorySheet.getRange(1, 1, 1, 4).setValues([[
-      'id_subkategori', 'id_kategori_utama', 'Nomor', 'judul_subkategori'
-    ]]);
+    subCategorySheet.getRange(1, 1, 1, 4).setValues([['id_subkategori', 'id_kategori_utama', 'Nomor', 'judul_subkategori']]);
+    console.log('SubKategori sheet created');
   }
   
-  // Sheet Kelompok_Atlet
   let athleteGroupSheet = spreadsheet.getSheetByName('Kelompok_Atlet');
   if (!athleteGroupSheet) {
     athleteGroupSheet = spreadsheet.insertSheet('Kelompok_Atlet');
-    athleteGroupSheet.getRange(1, 1, 1, 5).setValues([[
-      'id_kel', 'id_SubKelompok', 'Judul', 'Nomor', 'Keterangan'
-    ]]);
+    athleteGroupSheet.getRange(1, 1, 1, 5).setValues([['id_kel', 'id_SubKelompok', 'Judul', 'Nomor', 'Keterangan']]);
+    console.log('Kelompok_Atlet sheet created');
   }
   
-  // Sheet daftar_kelompok
   let groupListSheet = spreadsheet.getSheetByName('daftar_kelompok');
   if (!groupListSheet) {
     groupListSheet = spreadsheet.insertSheet('daftar_kelompok');
-    groupListSheet.getRange(1, 1, 1, 9).setValues([[
-      'id_daftarKelompok', 'id_kelompokAtlet', 'nama_atlet', 'Berat_badan', 
-      'Tinggi_badan', 'sabuk', 'umur', 'MB', 'Nomor'
-    ]]);
+    groupListSheet.getRange(1, 1, 1, 9).setValues([['id_daftarKelompok', 'id_kelompokAtlet', 'nama_atlet', 'Berat_badan', 'Tinggi_badan', 'sabuk', 'umur', 'MB', 'Nomor']]);
+    console.log('daftar_kelompok sheet created');
   }
   
   console.log('All sheets initialized successfully');
-  return 'All sheets initialized successfully';
 }

@@ -92,6 +92,21 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-12 - Complete CRUD Operations Fix for Tournament Management (COMPLETED)
+- **Google Apps Script Fix**: Fixed missing `updateSubCategory` and `deleteSubCategory` actions causing edit/delete operations to show success toast but not actually update data
+  - Added complete CRUD operations for Sub Categories: create, read, update, delete
+  - Added complete CRUD operations for Athlete Groups: create, read, update, delete
+  - Created `google-apps-script-tournament-fixed-crud.js` with all required actions
+  - Enhanced error handling and validation for all tournament operations
+- **Frontend Enhancement**: Added three-dot dropdown menus for edit/delete on sub categories and athlete groups
+  - Edit dialogs for sub categories with proper form handling and validation
+  - Proper mutation handlers for update and delete operations with cache invalidation
+  - Improved user feedback with success/error toasts
+- **Data Synchronization**: Fixed sync between frontend state, backend API, and Google Sheets
+  - Update operations now properly modify Google Sheets data
+  - Delete operations remove rows from Google Sheets
+  - Real-time UI updates after successful operations
+
 ### 2025-07-12 - Enhanced Search & Filter Features + Google Apps Script Fix (COMPLETED)
 - **Search & Filter Enhancement**: Added comprehensive search and filter functionality to tournament and matches pages
   - Tournament page: Enhanced athlete selection with search by name, filter by belt/gender/dojang, and sorting options

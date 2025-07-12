@@ -53,9 +53,9 @@ export default function Tournament() {
   const [selectedBlueCorner, setSelectedBlueCorner] = useState<Athlete | null>(null);
   const [athleteSearchQuery, setAthleteSearchQuery] = useState('');
   const [athleteFilter, setAthleteFilter] = useState({
-    belt: '',
-    gender: '',
-    dojang: ''
+    belt: 'all',
+    gender: 'all',
+    dojang: 'all'
   });
   
   const queryClient = useQueryClient();
@@ -99,9 +99,9 @@ export default function Tournament() {
   const filteredAthletes = allAthletes.filter(athlete => {
     const matchesSearch = athlete.name.toLowerCase().includes(athleteSearchQuery.toLowerCase()) ||
                          athlete.dojang.toLowerCase().includes(athleteSearchQuery.toLowerCase());
-    const matchesBelt = !athleteFilter.belt || athlete.belt === athleteFilter.belt;
-    const matchesGender = !athleteFilter.gender || athlete.gender === athleteFilter.gender;
-    const matchesDojang = !athleteFilter.dojang || athlete.dojang === athleteFilter.dojang;
+    const matchesBelt = !athleteFilter.belt || athleteFilter.belt === 'all' || athlete.belt === athleteFilter.belt;
+    const matchesGender = !athleteFilter.gender || athleteFilter.gender === 'all' || athlete.gender === athleteFilter.gender;
+    const matchesDojang = !athleteFilter.dojang || athleteFilter.dojang === 'all' || athlete.dojang === athleteFilter.dojang;
     
     return matchesSearch && matchesBelt && matchesGender && matchesDojang;
   });
@@ -116,7 +116,7 @@ export default function Tournament() {
     setSelectedRedCorner(null);
     setSelectedBlueCorner(null);
     setAthleteSearchQuery('');
-    setAthleteFilter({ belt: '', gender: '', dojang: '' });
+    setAthleteFilter({ belt: 'all', gender: 'all', dojang: 'all' });
   };
 
   // Mutations
@@ -676,7 +676,14 @@ export default function Tournament() {
       <div className="flex justify-end">
         <Dialog open={showCreateAthleteGroup} onOpenChange={setShowCreateAthleteGroup}>
           <DialogTrigger asChild>
-            <Button>
+            <Button 
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowCreateAthleteGroup(true);
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Buat Kelompok
             </Button>
@@ -742,7 +749,7 @@ export default function Tournament() {
                         <SelectValue placeholder="Filter Sabuk" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Semua Sabuk</SelectItem>
+                        <SelectItem value="all">Semua Sabuk</SelectItem>
                         {uniqueBelts.map(belt => (
                           <SelectItem key={belt} value={belt}>{belt}</SelectItem>
                         ))}
@@ -754,7 +761,7 @@ export default function Tournament() {
                         <SelectValue placeholder="Filter Gender" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Semua Gender</SelectItem>
+                        <SelectItem value="all">Semua Gender</SelectItem>
                         {uniqueGenders.map(gender => (
                           <SelectItem key={gender} value={gender}>{gender}</SelectItem>
                         ))}
@@ -766,7 +773,7 @@ export default function Tournament() {
                         <SelectValue placeholder="Filter Dojang" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Semua Dojang</SelectItem>
+                        <SelectItem value="all">Semua Dojang</SelectItem>
                         {uniqueDojangs.map(dojang => (
                           <SelectItem key={dojang} value={dojang}>{dojang}</SelectItem>
                         ))}

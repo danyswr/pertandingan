@@ -40,10 +40,12 @@ export default function Tournament() {
   const [showCreateMainCategory, setShowCreateMainCategory] = useState(false);
   const [showEditMainCategory, setShowEditMainCategory] = useState(false);
   const [showCreateSubCategory, setShowCreateSubCategory] = useState(false);
+  const [showEditSubCategory, setShowEditSubCategory] = useState(false);
   const [showCreateAthleteGroup, setShowCreateAthleteGroup] = useState(false);
   const [showEditAthleteGroup, setShowEditAthleteGroup] = useState(false);
   const [showAddAthlete, setShowAddAthlete] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MainCategory | null>(null);
+  const [editingSubCategory, setEditingSubCategory] = useState<SubCategory | null>(null);
   const [editingGroup, setEditingGroup] = useState<AthleteGroup | null>(null);
   
   const queryClient = useQueryClient();
@@ -204,6 +206,31 @@ export default function Tournament() {
     },
   });
 
+  const updateSubCategoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertSubCategory> }) =>
+      api.updateSubCategory(id, data),
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Sub kategori berhasil diperbarui" });
+      setShowEditSubCategory(false);
+      setEditingSubCategory(null);
+      queryClient.invalidateQueries({ queryKey: ['sub-categories', selectedMainCategory?.id] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal memperbarui sub kategori", variant: "destructive" });
+    },
+  });
+
+  const deleteSubCategoryMutation = useMutation({
+    mutationFn: api.deleteSubCategory,
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Sub kategori berhasil dihapus" });
+      queryClient.invalidateQueries({ queryKey: ['sub-categories', selectedMainCategory?.id] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal menghapus sub kategori", variant: "destructive" });
+    },
+  });
+
   // Handle form submissions
   const handleCreateMainCategory = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -268,6 +295,17 @@ export default function Tournament() {
       matchNumber: parseInt(formData.get('matchNumber') as string) || 1,
     };
     updateAthleteGroupMutation.mutate({ id: editingGroup.id, data });
+  };
+
+  const handleEditSubCategory = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingSubCategory) return;
+    const formData = new FormData(e.currentTarget);
+    const data: Partial<InsertSubCategory> = {
+      name: formData.get('name') as string,
+      order: parseInt(formData.get('order') as string) || 1,
+    };
+    updateSubCategoryMutation.mutate({ id: editingSubCategory.id, data });
   };
 
   const handleAddAthlete = (e: React.FormEvent<HTMLFormElement>) => {
@@ -455,16 +493,84 @@ export default function Tournament() {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* Edit Sub Category Dialog */}
+        <Dialog open={showEditSubCategory} onOpenChange={setShowEditSubCategory}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Sub Kategori</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleEditSubCategory} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-sub-name">Nama Sub Kategori</Label>
+                <Input 
+                  id="edit-sub-name" 
+                  name="name" 
+                  placeholder="Contoh: Remaja, Dewasa" 
+                  defaultValue={editingSubCategory?.name}
+                  required 
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-sub-order">Nomor Urut</Label>
+                <Input 
+                  id="edit-sub-order" 
+                  name="order" 
+                  type="number" 
+                  placeholder="1" 
+                  min="1" 
+                  defaultValue={editingSubCategory?.order}
+                  required 
+                />
+              </div>
+              <Button type="submit" className="w-full">
+                Perbarui Sub Kategori
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {subCategories.map((subCategory) => (
           <Card key={subCategory.id} className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-blue-500" />
-                {subCategory.name}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-500" />
+                  {subCategory.name}
+                </CardTitle>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditingSubCategory(subCategory);
+                        setShowEditSubCategory(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Sub Kategori
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (window.confirm(`Apakah Anda yakin ingin menghapus sub kategori "${subCategory.name}"?`)) {
+                          deleteSubCategoryMutation.mutate(subCategory.id);
+                        }
+                      }}
+                      disabled={deleteSubCategoryMutation.isPending}
+                      className="text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Hapus Sub Kategori
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-4">

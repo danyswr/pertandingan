@@ -6,13 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Header } from "@/components/layout/header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtime } from "@/hooks/use-realtime";
 import { api } from "@/lib/api";
-import { Search, Filter, Users, Calendar, Download, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
-import type { GoogleSheetsCompetition, GoogleSheetsAthlete, Athlete } from "@shared/schema";
+import { Search, Filter, Users, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, Plus, Edit, Trash2, UserCheck } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertAthleteSchema } from "@shared/schema";
+import type { GoogleSheetsCompetition, GoogleSheetsAthlete, Athlete, InsertAthlete } from "@shared/schema";
 
 // Interface untuk filter
 interface AthleteFilters {
@@ -40,6 +45,9 @@ export default function Athletes() {
   );
   const [showCompetitionDialog, setShowCompetitionDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showAddAthleteDialog, setShowAddAthleteDialog] = useState(false);
+  const [showEditAthleteDialog, setShowEditAthleteDialog] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   
   // State untuk filter
   const [filters, setFilters] = useState<AthleteFilters>({
@@ -107,6 +115,144 @@ export default function Athletes() {
       });
     }
   });
+
+  // Add athlete mutation
+  const addAthleteMutation = useMutation({
+    mutationFn: api.createAthlete,
+    onSuccess: () => {
+      toast({
+        title: "Atlet Ditambahkan",
+        description: "Data atlet berhasil ditambahkan",
+      });
+      setShowAddAthleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
+    },
+    onError: () => {
+      toast({
+        title: "Gagal Menambahkan",
+        description: "Terjadi kesalahan saat menambahkan atlet",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Edit athlete mutation
+  const editAthleteMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertAthlete> }) => api.updateAthlete(id, data),
+    onSuccess: () => {
+      toast({
+        title: "Atlet Diperbarui",
+        description: "Data atlet berhasil diperbarui",
+      });
+      setShowEditAthleteDialog(false);
+      setEditingAthlete(null);
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
+    },
+    onError: () => {
+      toast({
+        title: "Gagal Memperbarui",
+        description: "Terjadi kesalahan saat memperbarui data atlet",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Delete athlete mutation
+  const deleteAthleteMutation = useMutation({
+    mutationFn: api.deleteAthlete,
+    onSuccess: () => {
+      toast({
+        title: "Atlet Dihapus",
+        description: "Data atlet berhasil dihapus",
+      });
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
+    },
+    onError: () => {
+      toast({
+        title: "Gagal Menghapus",
+        description: "Terjadi kesalahan saat menghapus atlet",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Update attendance mutation
+  const updateAttendanceMutation = useMutation({
+    mutationFn: ({ id, isPresent }: { id: number; isPresent: boolean }) => api.updateAthleteAttendance(id, isPresent),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
+    },
+    onError: () => {
+      toast({
+        title: "Gagal Update Kehadiran",
+        description: "Terjadi kesalahan saat memperbarui kehadiran",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Form for adding new athlete
+  const addForm = useForm<InsertAthlete>({
+    resolver: zodResolver(insertAthleteSchema),
+    defaultValues: {
+      name: '',
+      gender: '',
+      birthDate: '',
+      dojang: '',
+      belt: '',
+      weight: 0,
+      height: 0,
+      category: '',
+      class: '',
+      isPresent: false,
+      status: 'available'
+    }
+  });
+
+  // Form for editing athlete
+  const editForm = useForm<InsertAthlete>({
+    resolver: zodResolver(insertAthleteSchema.partial()),
+    defaultValues: {}
+  });
+
+  // Handler functions
+  const handleAddAthlete = (data: InsertAthlete) => {
+    addAthleteMutation.mutate(data);
+  };
+
+  const handleEditAthlete = (data: Partial<InsertAthlete>) => {
+    if (editingAthlete) {
+      editAthleteMutation.mutate({ id: editingAthlete.id, data });
+    }
+  };
+
+  const handleDeleteAthlete = (id: number, name: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus atlet ${name}?`)) {
+      deleteAthleteMutation.mutate(id);
+    }
+  };
+
+  const handleEditClick = (athlete: Athlete) => {
+    setEditingAthlete(athlete);
+    editForm.reset({
+      name: athlete.name,
+      gender: athlete.gender,
+      birthDate: athlete.birthDate,
+      dojang: athlete.dojang,
+      belt: athlete.belt,
+      weight: athlete.weight,
+      height: athlete.height,
+      category: athlete.category,
+      class: athlete.class,
+      isPresent: athlete.isPresent,
+      status: athlete.status
+    });
+    setShowEditAthleteDialog(true);
+  };
+
+  const handleAttendanceToggle = (id: number, currentStatus: boolean) => {
+    updateAttendanceMutation.mutate({ id, isPresent: !currentStatus });
+  };
 
   // Fungsi untuk menghitung umur dari tanggal lahir
   const calculateAge = (birthDate: string): number => {
@@ -277,6 +423,10 @@ export default function Athletes() {
 
       {/* Main Actions */}
       <div className="flex gap-4">
+        <Button onClick={() => setShowAddAthleteDialog(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Tambah Atlet
+        </Button>
         <Button variant="outline" onClick={() => setShowCompetitionDialog(true)}>
           <Calendar className="w-4 h-4 mr-2" />
           Pilih Kejuaraan untuk Import
@@ -508,7 +658,8 @@ export default function Athletes() {
                         <th className="text-left p-3">Berat/Tinggi</th>
                         <th className="text-left p-3">Kategori</th>
                         <th className="text-left p-3">Kelas</th>
-                        <th className="text-left p-3">Status</th>
+                        <th className="text-left p-3">Kehadiran</th>
+                        <th className="text-left p-3">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -525,9 +676,34 @@ export default function Athletes() {
                           <td className="p-3">{athlete.category}</td>
                           <td className="p-3">{athlete.class}</td>
                           <td className="p-3">
-                            <Badge variant={athlete.isPresent ? "default" : "secondary"}>
-                              {athlete.isPresent ? "Hadir" : "Belum Hadir"}
-                            </Badge>
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                checked={athlete.isPresent}
+                                onCheckedChange={() => handleAttendanceToggle(athlete.id, athlete.isPresent)}
+                              />
+                              <span className={athlete.isPresent ? "text-green-600" : "text-gray-500"}>
+                                {athlete.isPresent ? "Hadir" : "Belum Hadir"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditClick(athlete)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteAthlete(athlete.id, athlete.name)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -635,6 +811,334 @@ export default function Athletes() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog untuk tambah atlet */}
+      <Dialog open={showAddAthleteDialog} onOpenChange={setShowAddAthleteDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tambah Atlet Baru</DialogTitle>
+          </DialogHeader>
+          
+          <Form {...addForm}>
+            <form onSubmit={addForm.handleSubmit(handleAddAthlete)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nama Lengkap *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Masukkan nama lengkap" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gender *</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pilih gender" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Laki-laki">Laki-laki</SelectItem>
+                          <SelectItem value="Perempuan">Perempuan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="birthDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tanggal Lahir *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Jakarta, 15 Januari 2010" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="dojang"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dojang *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nama dojang" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="belt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sabuk *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. kuning" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="weight"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Berat (kg) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="height"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tinggi (cm) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kategori *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Kyorugi, UKT" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="class"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kelas *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Pemula" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setShowAddAthleteDialog(false)}>
+                  Batal
+                </Button>
+                <Button type="submit" disabled={addAthleteMutation.isPending}>
+                  {addAthleteMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog untuk edit atlet */}
+      <Dialog open={showEditAthleteDialog} onOpenChange={setShowEditAthleteDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Atlet: {editingAthlete?.name}</DialogTitle>
+          </DialogHeader>
+          
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(handleEditAthlete)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nama Lengkap *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Masukkan nama lengkap" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gender *</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pilih gender" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Laki-laki">Laki-laki</SelectItem>
+                          <SelectItem value="Perempuan">Perempuan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="birthDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tanggal Lahir *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Jakarta, 15 Januari 2010" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="dojang"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dojang *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nama dojang" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="belt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sabuk *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. kuning" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="weight"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Berat (kg) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="height"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tinggi (cm) *</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kategori *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Kyorugi, UKT" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="class"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kelas *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Pemula" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setShowEditAthleteDialog(false)}>
+                  Batal
+                </Button>
+                <Button type="submit" disabled={editAthleteMutation.isPending}>
+                  {editAthleteMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

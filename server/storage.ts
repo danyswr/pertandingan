@@ -43,6 +43,7 @@ export interface IStorage {
   updateAthlete(id: number, athlete: Partial<InsertAthlete>): Promise<Athlete>;
   updateAthleteAttendance(id: number, isPresent: boolean): Promise<Athlete>;
   updateAthleteStatus(id: number, status: string, ring?: string): Promise<Athlete>;
+  deleteAthlete(id: number): Promise<void>;
   
   // Main Categories (Kategori_utama)
   getAllMainCategories(): Promise<MainCategory[]>;
@@ -301,6 +302,14 @@ export class MemStorage implements IStorage {
     }
     
     return updated;
+  }
+
+  async deleteAthlete(id: number): Promise<void> {
+    const athlete = this.athletes.get(id);
+    if (!athlete) throw new Error(`Athlete with id ${id} not found`);
+    
+    this.athletes.delete(id);
+    this.athleteStatusMap.delete(id);
   }
 
   // Main Categories (Kategori_utama) methods

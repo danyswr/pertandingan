@@ -243,6 +243,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/athletes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertAthleteSchema.partial().parse(req.body);
+      const athlete = await storage.updateAthlete(id, validatedData);
+      broadcast({ type: 'athlete_updated', data: athlete });
+      res.json(athlete);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: 'Invalid athlete data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to update athlete' });
+      }
+    }
+  });
+
+  app.patch('/api/athletes/:id/attendance', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { isPresent } = req.body;
+      const athlete = await storage.updateAthleteAttendance(id, isPresent);
+      broadcast({ type: 'athlete_attendance_updated', data: athlete });
+      res.json(athlete);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update athlete attendance' });
+    }
+  });
+
+  app.delete('/api/athletes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAthlete(id);
+      broadcast({ type: 'athlete_deleted', data: { id } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete athlete' });
+    }
+  });
+
   app.patch('/api/athletes/:id/attendance', async (req, res) => {
     try {
       const id = parseInt(req.params.id);

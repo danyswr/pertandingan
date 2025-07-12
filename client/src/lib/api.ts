@@ -47,6 +47,12 @@ export const api = {
   updateAthleteStatus: (id: number, status: string, ring?: string): Promise<Athlete> =>
     apiRequest('PATCH', `/api/athletes/${id}/status`, { status, ring }).then(res => res.json()),
 
+  updateAthlete: (id: number, athlete: Partial<InsertAthlete>): Promise<Athlete> =>
+    apiRequest('PUT', `/api/athletes/${id}`, athlete).then(res => res.json()),
+
+  deleteAthlete: (id: number): Promise<void> =>
+    apiRequest('DELETE', `/api/athletes/${id}`).then(res => res.json()),
+
   // Categories
   getCategories: (): Promise<Category[]> =>
     fetch('/api/categories').then(res => res.json()),

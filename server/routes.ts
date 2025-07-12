@@ -190,6 +190,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Helper function to update athlete data in Google Sheets
+  async function updateGoogleSheetsAthlete(athleteId: number, athlete: any) {
+    try {
+      console.log(`Attempting to update Google Sheets athlete data for athlete ${athleteId}`);
+
+      const postData = new URLSearchParams({
+        action: 'updateAthlete',
+        athleteId: athleteId.toString(),
+        name: athlete.name || '',
+        gender: athlete.gender || '',
+        birthDate: athlete.birthDate || '',
+        dojang: athlete.dojang || '',
+        belt: athlete.belt || '',
+        weight: athlete.weight?.toString() || '0',
+        height: athlete.height?.toString() || '0',
+        category: athlete.category || '',
+        class: athlete.class || '',
+        status: athlete.status || 'available'
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: postData.toString(),
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log(`Google Sheets athlete update response status: ${response.status}`);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`Google Sheets athlete update error: ${responseText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseText = await response.text();
+      console.log(`Google Sheets athlete update response: ${responseText}`);
+
+      try {
+        const result = JSON.parse(responseText);
+        console.log('Google Sheets athlete update result:', result);
+        return result;
+      } catch (parseError) {
+        console.error('Failed to parse Google Sheets response:', parseError);
+        return { success: false, error: 'Invalid response format' };
+      }
+    } catch (error) {
+      console.error('Failed to update Google Sheets athlete:', error);
+      throw error;
+    }
+  }
+
   // Dashboard routes
   app.get('/api/dashboard/stats', async (req, res) => {
     try {
@@ -403,6 +463,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       broadcast({ type: 'athlete_updated', data: athlete });
       res.json(athlete);
+      
+      // Sync to Google Sheets asynchronously (don't wait for it)
+      updateGoogleSheetsAthlete(id, athlete).catch(error => {
+        console.error('Failed to sync athlete update to Google Sheets:', error);
+      });
     } catch (error) {
       console.error('Update athlete error:', error);
       if (error instanceof z.ZodError) {

@@ -66,6 +66,71 @@ function doPost(e) {
       }
     }
     
+    // Handle athlete data update
+    if (params.action === 'updateAthlete') {
+      const athleteId = parseInt(params.athleteId);
+      
+      console.log('Updating athlete data for ID:', athleteId);
+      console.log('Update data:', JSON.stringify(params));
+      
+      if (athleteId && athleteId > 0) {
+        const rowIndex = athleteId + 1; // +1 because row 1 is header, athlete ID 1 is row 2
+        
+        // Check if row exists
+        const data = sheet.getDataRange().getValues();
+        if (data.length > rowIndex - 1) {
+          // Update the athlete row with new data
+          // Column mapping: 1=ID, 2=Name, 3=Gender, 4=Birth Date, 5=Dojang, 6=Belt, 7=Weight, 8=Height, 9=Category, 10=Class, 11=Present, 12=Status, 13=Timestamp
+          const updateData = [
+            [
+              athleteId, // ID Atlet (Column A)
+              params.name || data[rowIndex - 1][1], // Nama Lengkap (Column B)
+              params.gender || data[rowIndex - 1][2], // Gender (Column C)
+              params.birthDate || data[rowIndex - 1][3], // Tanggal Lahir (Column D)
+              params.dojang || data[rowIndex - 1][4], // Dojang (Column E)
+              params.belt || data[rowIndex - 1][5], // Sabuk (Column F)
+              parseFloat(params.weight) || data[rowIndex - 1][6], // Berat Badan (Column G)
+              parseFloat(params.height) || data[rowIndex - 1][7], // Tinggi Badan (Column H)
+              params.category || data[rowIndex - 1][8], // Kategori (Column I)
+              params.class || data[rowIndex - 1][9], // Kelas (Column J)
+              data[rowIndex - 1][10], // Keep existing attendance (Column K)
+              params.status || data[rowIndex - 1][11], // Status (Column L)
+              new Date().toLocaleString('id-ID') // Update timestamp (Column M)
+            ]
+          ];
+          
+          // Update the entire row
+          sheet.getRange(rowIndex, 1, 1, 13).setValues(updateData);
+          
+          console.log('Athlete data updated successfully for athlete:', athleteId);
+          
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: true, 
+              message: 'Athlete data updated successfully',
+              athleteId: athleteId,
+              updatedData: updateData[0]
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        } else {
+          console.log('Athlete row not found:', athleteId);
+          return ContentService
+            .createTextOutput(JSON.stringify({
+              success: false, 
+              message: 'Athlete not found'
+            }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      } else {
+        return ContentService
+          .createTextOutput(JSON.stringify({
+            success: false, 
+            message: 'Invalid athlete ID'
+          }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    
     if (params.action === 'addData' && params.rowData) {
       // Parse data dari parameter
       const rowData = JSON.parse(params.rowData);

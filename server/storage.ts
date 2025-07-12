@@ -1007,31 +1007,73 @@ export class MemStorage implements IStorage {
     try {
       console.log(`Loading sub categories for main category ${mainCategoryId}...`);
       
-      // Create default sub category based on user's screenshot showing "sabuk putih - biru"
-      const existingSubCategories = Array.from(this.subCategories.values()).filter(sc => sc.mainCategoryId !== mainCategoryId);
-      this.subCategories.clear();
+      // Use the tournament management Google Apps Script URL
+      const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
       
-      // Re-add sub categories from other main categories
-      existingSubCategories.forEach(sc => this.subCategories.set(sc.id, sc));
-      
-      let maxId = Math.max(...Array.from(this.subCategories.keys()), 0);
-      
-      // Add default sub category for kyorugi (main category ID 1)
-      if (mainCategoryId === 1) {
-        const defaultSubCategory: SubCategory = {
-          id: maxId + 1,
-          mainCategoryId: mainCategoryId,
-          order: 2,
-          name: 'sabuk putih - biru',
-          isActive: true
-        };
+      try {
+        // Fetch sub categories from Google Sheets
+        const url = new URL(managementUrl);
+        url.searchParams.append('action', 'getSubCategories');
+        url.searchParams.append('mainCategoryId', mainCategoryId.toString());
         
-        this.subCategories.set(defaultSubCategory.id, defaultSubCategory);
-        this.currentSubCategoryId = defaultSubCategory.id + 1;
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          redirect: 'follow'
+        });
         
-        console.log(`Loaded 1 sub category (default data) for main category ${mainCategoryId}`);
-      } else {
-        console.log(`No sub categories for main category ${mainCategoryId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Clear existing sub categories for this main category
+        const existingSubCategories = Array.from(this.subCategories.values()).filter(sc => sc.mainCategoryId !== mainCategoryId);
+        this.subCategories.clear();
+        
+        // Re-add sub categories from other main categories
+        existingSubCategories.forEach(sc => this.subCategories.set(sc.id, sc));
+        
+        let maxId = Math.max(...Array.from(this.subCategories.keys()), 0);
+        
+        if (result.success && result.data && Array.isArray(result.data)) {
+          // Process Google Sheets data (skip header row if present)
+          const dataRows = result.data.slice(1); // Skip header row
+          
+          dataRows.forEach((row: any[], index: number) => {
+            if (row && row.length >= 4 && row[0] && row[1] && row[3]) {
+              const subCategory: SubCategory = {
+                id: parseInt(row[0]) || (maxId + index + 1),
+                mainCategoryId: parseInt(row[1]) || mainCategoryId,
+                order: parseInt(row[2]) || (index + 1),
+                name: row[3].toString().trim(),
+                isActive: true
+              };
+              
+              // Only add if it belongs to the requested main category
+              if (subCategory.mainCategoryId === mainCategoryId) {
+                this.subCategories.set(subCategory.id, subCategory);
+                maxId = Math.max(maxId, subCategory.id);
+              }
+            }
+          });
+          
+          // Set next ID
+          this.currentSubCategoryId = maxId + 1;
+          
+          const loadedCount = Array.from(this.subCategories.values()).filter(sc => sc.mainCategoryId === mainCategoryId).length;
+          console.log(`Loaded ${loadedCount} sub categories from Google Sheets for main category ${mainCategoryId}`);
+        } else {
+          console.log(`No sub categories found in Google Sheets for main category ${mainCategoryId}`);
+        }
+        
+      } catch (fetchError) {
+        console.warn('Failed to fetch sub categories from Google Sheets:', fetchError);
+        console.log(`No sub categories for main category ${mainCategoryId} (Google Sheets fetch failed)`);
       }
       
     } catch (error) {
@@ -1049,51 +1091,76 @@ export class MemStorage implements IStorage {
     try {
       console.log(`Loading athlete groups for sub category ${subCategoryId}...`);
       
-      // Clear existing athlete groups for this sub category and reload default data
-      const existingAthleteGroups = Array.from(this.athleteGroups.values()).filter(ag => ag.subCategoryId !== subCategoryId);
-      this.athleteGroups.clear();
+      // Use the tournament management Google Apps Script URL
+      const managementUrl = 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec';
       
-      // Re-add athlete groups from other sub categories
-      existingAthleteGroups.forEach(ag => this.athleteGroups.set(ag.id, ag));
-      
-      let maxId = Math.max(...Array.from(this.athleteGroups.keys()), 0);
-      
-      // Add default athlete groups based on user's screenshot showing "Pertandingan 1" and "Pertandingan 2"
-      if (subCategoryId === 1) {
-        const defaultGroups = [
-          {
-            id: maxId + 1,
-            subCategoryId: subCategoryId,
-            name: 'Pertandingan 1',
-            description: 'Pertandingan sabuk putih - biru',
-            matchNumber: 1,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          },
-          {
-            id: maxId + 2,
-            subCategoryId: subCategoryId,
-            name: 'Pertandingan 2', 
-            description: 'Pertandingan sabuk putih - biru',
-            matchNumber: 1,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        ];
+      try {
+        // Fetch athlete groups from Google Sheets
+        const url = new URL(managementUrl);
+        url.searchParams.append('action', 'getAthleteGroups');
+        url.searchParams.append('subCategoryId', subCategoryId.toString());
         
-        defaultGroups.forEach(group => {
-          this.athleteGroups.set(group.id, group);
-          maxId = Math.max(maxId, group.id);
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          redirect: 'follow'
         });
         
-        this.currentAthleteGroupId = maxId + 1;
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        console.log(`Loaded ${defaultGroups.length} athlete groups (default data) for sub category ${subCategoryId}`);
-        console.log('Current athlete groups map:', Array.from(this.athleteGroups.values()));
-      } else {
-        console.log(`No athlete groups for sub category ${subCategoryId}`);
+        const result = await response.json();
+        
+        // Clear existing athlete groups for this sub category
+        const existingAthleteGroups = Array.from(this.athleteGroups.values()).filter(ag => ag.subCategoryId !== subCategoryId);
+        this.athleteGroups.clear();
+        
+        // Re-add athlete groups from other sub categories
+        existingAthleteGroups.forEach(ag => this.athleteGroups.set(ag.id, ag));
+        
+        let maxId = Math.max(...Array.from(this.athleteGroups.keys()), 0);
+        
+        if (result.success && result.data && Array.isArray(result.data)) {
+          // Process Google Sheets data (skip header row if present)
+          const dataRows = result.data.slice(1); // Skip header row
+          
+          dataRows.forEach((row: any[], index: number) => {
+            if (row && row.length >= 5 && row[0] && row[1] && row[2]) {
+              const athleteGroup: AthleteGroup = {
+                id: parseInt(row[0]) || (maxId + index + 1),
+                subCategoryId: parseInt(row[1]) || subCategoryId,
+                name: row[2].toString().trim(),
+                description: row[4] ? row[4].toString().trim() : '',
+                matchNumber: parseInt(row[3]) || (index + 1),
+                isActive: true,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+              
+              // Only add if it belongs to the requested sub category
+              if (athleteGroup.subCategoryId === subCategoryId) {
+                this.athleteGroups.set(athleteGroup.id, athleteGroup);
+                maxId = Math.max(maxId, athleteGroup.id);
+              }
+            }
+          });
+          
+          // Set next ID
+          this.currentAthleteGroupId = maxId + 1;
+          
+          const loadedCount = Array.from(this.athleteGroups.values()).filter(ag => ag.subCategoryId === subCategoryId).length;
+          console.log(`Loaded ${loadedCount} athlete groups from Google Sheets for sub category ${subCategoryId}`);
+        } else {
+          console.log(`No athlete groups found in Google Sheets for sub category ${subCategoryId}`);
+        }
+        
+      } catch (fetchError) {
+        console.warn('Failed to fetch athlete groups from Google Sheets:', fetchError);
+        console.log(`No athlete groups for sub category ${subCategoryId} (Google Sheets fetch failed)`);
       }
       
     } catch (error) {

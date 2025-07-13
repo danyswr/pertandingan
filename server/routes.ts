@@ -100,8 +100,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
-      console.log(`Google Sheets response for ${params.action || 'GET'}:`, JSON.stringify(data, null, 2));
+      const responseText = await response.text();
+      console.log(`Google Sheets raw response for ${params.action || 'GET'}:`, responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse Google Sheets response as JSON:', parseError);
+        
+        // Check if it's an HTML redirect response
+        if (responseText.includes('href=')) {
+          const match = responseText.match(/href="([^"]*)">/);
+          if (match) {
+            const redirectUrl = match[1].replace(/&amp;/g, '&');
+            console.log('Found redirect URL:', redirectUrl);
+            
+            // Follow the redirect
+            const redirectResponse = await fetch(redirectUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+              }
+            });
+            
+            const redirectText = await redirectResponse.text();
+            console.log('Redirect response:', redirectText);
+            
+            try {
+              data = JSON.parse(redirectText);
+            } catch (redirectParseError) {
+              console.error('Failed to parse redirect response:', redirectParseError);
+              throw new Error('Invalid redirect response format');
+            }
+          } else {
+            throw new Error('Invalid response format');
+          }
+        } else {
+          throw new Error('Invalid response format');
+        }
+      }
+      
+      console.log(`Google Sheets parsed response for ${params.action || 'GET'}:`, JSON.stringify(data, null, 2));
       
       // Cache hasil untuk permintaan selanjutnya
       dataCache.set(cacheKey, { data, timestamp: Date.now() });
@@ -437,16 +477,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               return {
                 id: athleteId,
-                name: athlete.name || '',
+                name: athlete.nama_lengkap || '',
                 gender: athlete.gender || '',
-                birthDate: athlete.birthDate || '',
+                birthDate: athlete.tgl_lahir || '',
                 dojang: athlete.dojang || '',
-                belt: athlete.belt || '',
-                weight: parseFloat(athlete.weight) || 0,
-                height: parseFloat(athlete.height) || 0,
-                category: athlete.category || '',
-                class: athlete.class || '',
-                isPresent: athlete.isPresent === 'TRUE' || athlete.isPresent === true || athlete.isPresent === 'true',
+                belt: athlete.sabuk || '',
+                weight: parseFloat(athlete.berat_badan) || 0,
+                height: parseFloat(athlete.tinggi_badan) || 0,
+                category: athlete.kategori || '',
+                class: athlete.kelas || '',
+                isPresent: athlete.hadir === 'TRUE' || athlete.hadir === true || athlete.hadir === 'true',
                 status: athlete.status || 'available',
                 createdAt: athlete.timestamp || new Date().toISOString()
               };

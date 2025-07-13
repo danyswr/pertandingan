@@ -386,6 +386,18 @@ export default function Tournament() {
     },
   });
 
+  const updateMedalMutation = useMutation({
+    mutationFn: ({ groupId, athleteId, hasMedal }: { groupId: number; athleteId: number; hasMedal: boolean }) =>
+      api.updateAthleteMedal(groupId, athleteId, hasMedal),
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Status medali berhasil diperbarui" });
+      queryClient.invalidateQueries({ queryKey: ['group-athletes', selectedAthleteGroup?.id] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal memperbarui status medali", variant: "destructive" });
+    },
+  });
+
   const updateAthleteGroupMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<InsertAthleteGroup> }) =>
       api.updateAthleteGroup(id, data),
@@ -1737,21 +1749,38 @@ export default function Tournament() {
                                 <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.belt}</p>
                                 <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.weight} kg</p>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeAthleteMutation.mutate({ 
-                                    groupId: group.id, 
-                                    athleteId: groupRedCorner.athleteId 
-                                  });
-                                }}
-                                className="mt-2"
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                Hapus
-                              </Button>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant={groupRedCorner.hasMedal ? "default" : "outline"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateMedalMutation.mutate({ 
+                                      groupId: group.id, 
+                                      athleteId: groupRedCorner.athleteId,
+                                      hasMedal: !groupRedCorner.hasMedal
+                                    });
+                                  }}
+                                  className={groupRedCorner.hasMedal ? "bg-yellow-500 hover:bg-yellow-600" : ""}
+                                >
+                                  <Trophy className="h-4 w-4 mr-1" />
+                                  {groupRedCorner.hasMedal ? "Sudah Medali" : "Belum Medali"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeAthleteMutation.mutate({ 
+                                      groupId: group.id, 
+                                      athleteId: groupRedCorner.athleteId 
+                                    });
+                                  }}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Hapus
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <div className="text-center py-8">
@@ -1810,21 +1839,38 @@ export default function Tournament() {
                                 <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.belt}</p>
                                 <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.weight} kg</p>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeAthleteMutation.mutate({ 
-                                    groupId: group.id, 
-                                    athleteId: groupBlueCorner.athleteId 
-                                  });
-                                }}
-                                className="mt-2"
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                Hapus
-                              </Button>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant={groupBlueCorner.hasMedal ? "default" : "outline"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateMedalMutation.mutate({ 
+                                      groupId: group.id, 
+                                      athleteId: groupBlueCorner.athleteId,
+                                      hasMedal: !groupBlueCorner.hasMedal
+                                    });
+                                  }}
+                                  className={groupBlueCorner.hasMedal ? "bg-yellow-500 hover:bg-yellow-600" : ""}
+                                >
+                                  <Trophy className="h-4 w-4 mr-1" />
+                                  {groupBlueCorner.hasMedal ? "Sudah Medali" : "Belum Medali"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeAthleteMutation.mutate({ 
+                                      groupId: group.id, 
+                                      athleteId: groupBlueCorner.athleteId 
+                                    });
+                                  }}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Hapus
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <div className="text-center py-8">
@@ -1854,28 +1900,48 @@ export default function Tournament() {
                                 const athlete = allAthletes.find(a => a.id === queueAthlete.athleteId);
                                 return (
                                   <Card key={queueAthlete.id} className="p-4 bg-white border border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <h4 className="font-semibold">{athlete?.name}</h4>
-                                        <p className="text-sm text-gray-600">
-                                          {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
-                                        </p>
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <h4 className="font-semibold">{athlete?.name}</h4>
+                                          <p className="text-sm text-gray-600">
+                                            {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              removeAthleteMutation.mutate({ 
+                                                groupId: group.id, 
+                                                athleteId: queueAthlete.athleteId 
+                                              });
+                                            }}
+                                            className="h-6 w-6 p-0"
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
+                                      <div className="flex justify-center">
                                         <Button
                                           size="sm"
-                                          variant="outline"
+                                          variant={queueAthlete.hasMedal ? "default" : "outline"}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            removeAthleteMutation.mutate({ 
+                                            updateMedalMutation.mutate({ 
                                               groupId: group.id, 
-                                              athleteId: queueAthlete.athleteId 
+                                              athleteId: queueAthlete.athleteId,
+                                              hasMedal: !queueAthlete.hasMedal
                                             });
                                           }}
-                                          className="h-6 w-6 p-0"
+                                          className={queueAthlete.hasMedal ? "bg-yellow-500 hover:bg-yellow-600" : ""}
                                         >
-                                          <X className="h-3 w-3" />
+                                          <Trophy className="h-4 w-4 mr-1" />
+                                          {queueAthlete.hasMedal ? "Sudah Medali" : "Belum Medali"}
                                         </Button>
                                       </div>
                                     </div>

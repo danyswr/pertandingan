@@ -72,6 +72,7 @@ export interface IStorage {
   removeAthleteFromGroup(groupId: number, athleteId: number): Promise<void>;
   updateAthletePosition(groupId: number, athleteId: number, position: string, queueOrder?: number): Promise<GroupAthlete>;
   eliminateAthlete(groupId: number, athleteId: number): Promise<GroupAthlete>;
+  updateAthleteMedal(groupId: number, athleteId: number, hasMedal: boolean): Promise<GroupAthlete>;
   
   // Legacy Categories
   getAllCategories(): Promise<Category[]>;
@@ -467,7 +468,8 @@ export class MemStorage implements IStorage {
       position: groupAthlete.position || null,
       queueOrder: groupAthlete.queueOrder || null,
       isEliminated: groupAthlete.isEliminated || null,
-      eliminatedAt: groupAthlete.eliminatedAt || null
+      eliminatedAt: groupAthlete.eliminatedAt || null,
+      hasMedal: groupAthlete.hasMedal || null
     };
     this.groupAthletes.set(id, newGroupAthlete);
     
@@ -511,6 +513,15 @@ export class MemStorage implements IStorage {
     
     groupAthlete.isEliminated = true;
     groupAthlete.eliminatedAt = new Date();
+    
+    return groupAthlete;
+  }
+
+  async updateAthleteMedal(groupId: number, athleteId: number, hasMedal: boolean): Promise<GroupAthlete> {
+    const groupAthlete = Array.from(this.groupAthletes.values()).find(ga => ga.groupId === groupId && ga.athleteId === athleteId);
+    if (!groupAthlete) throw new Error('Group athlete not found');
+    
+    groupAthlete.hasMedal = hasMedal;
     
     return groupAthlete;
   }

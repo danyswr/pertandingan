@@ -171,5 +171,8 @@ export const api = {
     apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/position`, { position, queueOrder }).then(res => res.json()),
   
   eliminateAthlete: (groupId: number, athleteId: number): Promise<GroupAthlete> =>
-    apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/eliminate`).then(res => res.json())
+    apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/eliminate`).then(res => res.json()),
+  
+  updateAthleteMedal: (groupId: number, athleteId: number, hasMedal: boolean): Promise<GroupAthlete> =>
+    apiRequest('PATCH', `/api/tournament/athlete-groups/${groupId}/athletes/${athleteId}/medal`, { hasMedal }).then(res => res.json())
 };

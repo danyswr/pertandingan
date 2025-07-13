@@ -56,7 +56,8 @@ export const groupAthletes = pgTable("group_athletes", {
   position: varchar("position", { length: 10 }), // "red", "blue", "queue"
   queueOrder: integer("queue_order"), // For queuing system when >2 athletes
   isEliminated: boolean("is_eliminated").default(false),
-  eliminatedAt: timestamp("eliminated_at")
+  eliminatedAt: timestamp("eliminated_at"),
+  hasMedal: boolean("has_medal").default(false) // Track if athlete has received medal
 });
 
 // Legacy Categories table (kept for backward compatibility)

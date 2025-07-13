@@ -298,6 +298,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Helper function to sync athlete to Google Sheets daftar_kelompok
+  async function syncAthleteToGoogleSheets(groupAthlete: any, athlete: any) {
+    try {
+      console.log(`Syncing athlete to Google Sheets daftar_kelompok: ${athlete.name}`);
+
+      const position = groupAthlete.position === 'red' ? 'merah' : 
+                      groupAthlete.position === 'blue' ? 'biru' : '';
+
+      const postData = new URLSearchParams({
+        action: 'addAthleteToGroup',
+        id: groupAthlete.id.toString(),
+        groupId: groupAthlete.groupId.toString(),
+        athleteName: athlete.name || '',
+        weight: athlete.weight?.toString() || '0',
+        height: athlete.height?.toString() || '0',
+        belt: athlete.belt || '',
+        age: calculateAge(athlete.birthDate) || '0',
+        position: position,
+        queueOrder: groupAthlete.queueOrder?.toString() || '1',
+        hasMedal: groupAthlete.hasMedal ? 'true' : 'false'
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: postData.toString(),
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`Google Sheets athlete sync error: ${responseText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseText = await response.text();
+      console.log(`Google Sheets athlete sync response: ${responseText}`);
+
+      try {
+        const result = JSON.parse(responseText);
+        console.log('Google Sheets athlete sync result:', result);
+        return result;
+      } catch (parseError) {
+        console.error('Failed to parse Google Sheets response:', parseError);
+        return { success: false, error: 'Invalid response format' };
+      }
+    } catch (error) {
+      console.error('Failed to sync athlete to Google Sheets:', error);
+      throw error;
+    }
+  }
+
+  // Helper function to calculate age from birth date
+  function calculateAge(birthDate: string): string {
+    if (!birthDate) return '0';
+    
+    try {
+      const birth = new Date(birthDate);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      
+      return age.toString();
+    } catch {
+      return '0';
+    }
+  }
+
   // Dashboard routes
   app.get('/api/dashboard/stats', async (req, res) => {
     try {
@@ -946,6 +1026,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const groupAthlete = await storage.addAthleteToGroup(validatedData);
       broadcast({ type: 'group_athlete_added', data: groupAthlete });
       res.json(groupAthlete);
+      
+      // Sync to Google Sheets asynchronously
+      const athlete = await storage.getAthleteById(groupAthlete.athleteId);
+      if (athlete) {
+        syncAthleteToGoogleSheets(groupAthlete, athlete).catch(error => {
+          console.error('Failed to sync athlete to Google Sheets:', error);
+        });
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid group athlete data', details: error.errors });
@@ -976,6 +1064,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const groupAthlete = await storage.updateAthletePosition(groupId, athleteId, position, queueOrder);
       broadcast({ type: 'athlete_position_updated', data: groupAthlete });
       res.json(groupAthlete);
+      
+      // Sync position update to Google Sheets asynchronously
+      const positionMB = position === 'red' ? 'merah' : 
+                        position === 'blue' ? 'biru' : position;
+      
+      syncTournamentToGoogleSheets('updateAthleteInGroup', {
+        id: groupAthlete.id.toString(),
+        position: positionMB,
+        queueOrder: queueOrder?.toString() || groupAthlete.queueOrder?.toString() || '1'
+      }).catch(error => {
+        console.error('Failed to sync position update to Google Sheets:', error);
+      });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update athlete position' });
     }
@@ -991,6 +1091,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(groupAthlete);
     } catch (error) {
       res.status(500).json({ error: 'Failed to eliminate athlete' });
+    }
+  });
+
+  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/medal', async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const athleteId = parseInt(req.params.athleteId);
+      const { hasMedal } = req.body;
+      
+      const groupAthlete = await storage.updateAthleteMedal(groupId, athleteId, hasMedal);
+      broadcast({ type: 'athlete_medal_updated', data: groupAthlete });
+      res.json(groupAthlete);
+      
+      // Sync medal update to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('updateAthleteInGroup', {
+        id: groupAthlete.id.toString(),
+        hasMedal: hasMedal ? 'true' : 'false'
+      }).catch(error => {
+        console.error('Failed to sync medal update to Google Sheets:', error);
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update athlete medal status' });
     }
   });
 

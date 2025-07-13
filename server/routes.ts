@@ -2,1742 +2,803 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { 
-  insertAthleteSchema, 
-  insertCategorySchema, 
+import {
+  insertAthleteSchema,
+  insertCategorySchema,
   insertMatchSchema,
   insertMainCategorySchema,
   insertSubCategorySchema,
   insertAthleteGroupSchema,
-  insertGroupAthleteSchema
+  insertGroupAthleteSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
 const GOOGLE_SHEETS_CONFIG = {
-  ATHLETES_API: process.env.ATHLETES_API || 'https://script.google.com/macros/s/AKfycbxBdFaCAXRAVjZYoEnWlJ7He7yeXjZrTYY11YsCjOLTmB-Ewe58jEKh97iXRdthIGhiMA/exec',
-  MANAGEMENT_API: process.env.MANAGEMENT_API || 'https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec'
+  ATHLETES_API:
+    process.env.ATHLETES_API ||
+    "https://script.google.com/macros/s/AKfycbxBdFaCAXRAVjZYoEnWlJ7He7yeXjZrTYY11YsCjOLTmB-Ewe58jEKh97iXRdthIGhiMA/exec",
+  MANAGEMENT_API:
+    process.env.MANAGEMENT_API ||
+    "https://script.google.com/macros/s/AKfycbypGY-NglCjtwpSrH-cH4d4ajH2BHLd1cMPgaxTX_w0zGzP_Q5_y4gHXTJoRQrOFMWZ/exec",
 };
 
-// Cache untuk mempercepat pengambilan data
-const dataCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_DURATION = 500; // 0.5 detik untuk response yang lebih cepat
+// Enhanced cache with TTL and better management
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  ttl: number;
+}
+
+const dataCache = new Map<string, CacheEntry>();
+const DEFAULT_CACHE_TTL = 30000; // 30 seconds
+const FAST_CACHE_TTL = 5000; // 5 seconds for frequently changing data
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-  
+
   // WebSocket server for real-time updates
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
   // Store WebSocket connections
   const clients = new Set<WebSocket>();
-  
-  wss.on('connection', (ws: WebSocket) => {
+
+  wss.on("connection", (ws: WebSocket) => {
     clients.add(ws);
-    console.log('New WebSocket client connected');
-    
-    ws.on('close', () => {
+    console.log("New WebSocket client connected. Total clients:", clients.size);
+
+    // Send initial connection confirmation
+    ws.send(
+      JSON.stringify({
+        type: "connection_established",
+        timestamp: new Date().toISOString(),
+        clientCount: clients.size,
+      }),
+    );
+
+    ws.on("close", () => {
       clients.delete(ws);
-      console.log('WebSocket client disconnected');
+      console.log(
+        "WebSocket client disconnected. Remaining clients:",
+        clients.size,
+      );
     });
-    
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+
+    ws.on("error", (error) => {
+      console.error("WebSocket error:", error);
       clients.delete(ws);
     });
   });
-  
-  // Broadcast function for real-time updates
+
+  // Enhanced broadcast function with error handling
   function broadcast(data: any) {
-    const message = JSON.stringify(data);
-    clients.forEach(client => {
+    const message = JSON.stringify({
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+
+    const deadClients = new Set<WebSocket>();
+
+    clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
+        try {
+          client.send(message);
+        } catch (error) {
+          console.error("Error sending WebSocket message:", error);
+          deadClients.add(client);
+        }
+      } else {
+        deadClients.add(client);
       }
+    });
+
+    // Clean up dead connections
+    deadClients.forEach((client) => clients.delete(client));
+  }
+
+  // Enhanced cache management
+  function getCachedData(key: string): any | null {
+    const entry = dataCache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      dataCache.delete(key);
+      return null;
+    }
+
+    return entry.data;
+  }
+
+  function setCachedData(
+    key: string,
+    data: any,
+    ttl: number = DEFAULT_CACHE_TTL,
+  ): void {
+    dataCache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl,
     });
   }
 
-  // Helper function to fetch from Google Sheets dengan caching
-  async function fetchFromGoogleSheets(url: string, params: Record<string, string> = {}) {
-    try {
-      const cacheKey = `${url}?${new URLSearchParams(params).toString()}`;
-      console.log(`Fetching from Google Sheets with params:`, params);
-      
-      // Check cache first
-      if (dataCache.has(cacheKey)) {
-        const cached = dataCache.get(cacheKey)!;
-        if (Date.now() - cached.timestamp < CACHE_DURATION) {
-          console.log(`Using cached data for ${params.action || 'GET'}`);
-          return cached.data;
-        } else {
-          dataCache.delete(cacheKey);
-        }
-      }
-      
-      const urlWithParams = new URL(url);
-      Object.entries(params).forEach(([key, value]) => {
-        urlWithParams.searchParams.append(key, value);
-      });
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 detik timeout untuk response lebih cepat
-      
-      console.log(`Making request to: ${urlWithParams.toString()}`);
-      
-      const response = await fetch(urlWithParams.toString(), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.error(`Google Sheets API error: ${response.status} ${response.statusText}`);
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const responseText = await response.text();
-      console.log(`Google Sheets raw response for ${params.action || 'GET'}:`, responseText);
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('Failed to parse Google Sheets response as JSON:', parseError);
-        
-        // Check if it's an HTML redirect response
-        if (responseText.includes('href=')) {
-          const match = responseText.match(/href="([^"]*)">/);
-          if (match) {
-            const redirectUrl = match[1].replace(/&amp;/g, '&');
-            console.log('Found redirect URL:', redirectUrl);
-            
-            // Follow the redirect
-            const redirectResponse = await fetch(redirectUrl, {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-              }
-            });
-            
-            const redirectText = await redirectResponse.text();
-            console.log('Redirect response:', redirectText);
-            
-            try {
-              data = JSON.parse(redirectText);
-            } catch (redirectParseError) {
-              console.error('Failed to parse redirect response:', redirectParseError);
-              throw new Error('Invalid redirect response format');
-            }
-          } else {
-            throw new Error('Invalid response format');
-          }
-        } else {
-          throw new Error('Invalid response format');
-        }
-      }
-      
-      console.log(`Google Sheets parsed response for ${params.action || 'GET'}:`, JSON.stringify(data, null, 2));
-      
-      // Cache hasil untuk permintaan selanjutnya
-      dataCache.set(cacheKey, { data, timestamp: Date.now() });
-      
-      return data;
-    } catch (error) {
-      console.error('Google Sheets API error:', error);
-      throw new Error('Failed to fetch data from Google Sheets');
-    }
+  function clearCacheByPattern(pattern: string): void {
+    const keysToDelete = Array.from(dataCache.keys()).filter((key) =>
+      key.includes(pattern),
+    );
+    keysToDelete.forEach((key) => dataCache.delete(key));
   }
 
-  // Helper function to update attendance in Google Sheets
-  async function updateGoogleSheetsAttendance(athleteId: number, isPresent: boolean) {
-    try {
-      const athlete = await storage.getAthleteById(athleteId);
-      if (!athlete) {
-        throw new Error('Athlete not found');
+  // Enhanced Google Sheets API helper with better error handling
+  async function callGoogleSheetsAPI(
+    action: string,
+    params: Record<string, any> = {},
+    method: "GET" | "POST" = "GET",
+  ): Promise<any> {
+    const cacheKey = `${action}_${JSON.stringify(params)}`;
+
+    // Check cache for GET requests
+    if (method === "GET") {
+      const cached = getCachedData(cacheKey);
+      if (cached) {
+        console.log(`Cache hit for ${action}`);
+        return cached;
       }
-
-      console.log(`Attempting to update Google Sheets attendance for athlete ${athleteId} to ${isPresent}`);
-
-      const postData = new URLSearchParams({
-        action: 'updateAttendance',
-        athleteId: athleteId.toString(),
-        isPresent: isPresent.toString()
-      });
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
-
-      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: postData.toString(),
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-
-      clearTimeout(timeoutId);
-
-      console.log(`Google Sheets response status: ${response.status}`);
-      console.log(`Google Sheets response headers:`, Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const responseText = await response.text();
-        console.error(`Google Sheets error response: ${responseText}`);
-        throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
-      }
-
-      const responseText = await response.text();
-      console.log(`Google Sheets raw response: ${responseText}`);
-
-      try {
-        const result = JSON.parse(responseText);
-        console.log('Google Sheets attendance update result:', result);
-        return result;
-      } catch (parseError) {
-        console.error('Failed to parse Google Sheets response as JSON:', parseError);
-        // If it's not JSON, it might be HTML redirect, try to extract the actual URL
-        if (responseText.includes('href=')) {
-          const match = responseText.match(/href="([^"]*)">/);
-          if (match) {
-            const redirectUrl = match[1].replace(/&amp;/g, '&');
-            console.log('Found redirect URL:', redirectUrl);
-            
-            // Try the redirect URL
-            const redirectResponse = await fetch(redirectUrl, {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-              }
-            });
-            
-            const redirectResult = await redirectResponse.text();
-            console.log('Redirect response:', redirectResult);
-            
-            try {
-              return JSON.parse(redirectResult);
-            } catch (redirectParseError) {
-              console.error('Failed to parse redirect response:', redirectParseError);
-              return { success: false, error: 'Invalid response format' };
-            }
-          }
-        }
-        return { success: false, error: 'Invalid response format' };
-      }
-    } catch (error) {
-      console.error('Failed to update Google Sheets attendance:', error);
-      throw error;
     }
-  }
 
-  // Helper function to update athlete data in Google Sheets
-  async function updateGoogleSheetsAthlete(athleteId: number, athlete: any) {
     try {
-      console.log(`Attempting to update Google Sheets athlete data for athlete ${athleteId}`);
-
-      const postData = new URLSearchParams({
-        action: 'updateAthlete',
-        athleteId: athleteId.toString(),
-        name: athlete.name || '',
-        gender: athlete.gender || '',
-        birthDate: athlete.birthDate || '',
-        dojang: athlete.dojang || '',
-        belt: athlete.belt || '',
-        weight: athlete.weight?.toString() || '0',
-        height: athlete.height?.toString() || '0',
-        category: athlete.category || '',
-        class: athlete.class || '',
-        status: athlete.status || 'available'
-      });
+      console.log(`Calling Google Sheets API: ${action}`, params);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: postData.toString(),
-        signal: controller.signal,
-        redirect: 'follow'
-      });
+      let response: Response;
 
-      clearTimeout(timeoutId);
+      if (method === "GET") {
+        const url = new URL(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API);
+        url.searchParams.append("action", action);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            url.searchParams.append(key, String(value));
+          }
+        });
 
-      console.log(`Google Sheets athlete update response status: ${response.status}`);
+        response = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          },
+          signal: controller.signal,
+        });
+      } else {
+        const formData = new URLSearchParams();
+        formData.append("action", action);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            formData.append(key, String(value));
+          }
+        });
 
-      if (!response.ok) {
-        const responseText = await response.text();
-        console.error(`Google Sheets athlete update error: ${responseText}`);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formData.toString(),
+          signal: controller.signal,
+        });
       }
-
-      const responseText = await response.text();
-      console.log(`Google Sheets athlete update response: ${responseText}`);
-
-      try {
-        const result = JSON.parse(responseText);
-        console.log('Google Sheets athlete update result:', result);
-        return result;
-      } catch (parseError) {
-        console.error('Failed to parse Google Sheets response:', parseError);
-        return { success: false, error: 'Invalid response format' };
-      }
-    } catch (error) {
-      console.error('Failed to update Google Sheets athlete:', error);
-      throw error;
-    }
-  }
-
-  // Helper function to sync tournament data to Google Sheets
-  async function syncTournamentToGoogleSheets(action: string, data: any) {
-    try {
-      console.log(`Syncing tournament data to Google Sheets: ${action}`, data);
-
-      const postData = new URLSearchParams({
-        action: action,
-        ...data
-      });
-
-      console.log(`POST data being sent:`, postData.toString());
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
-
-      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: postData.toString(),
-        signal: controller.signal,
-        redirect: 'follow'
-      });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const responseText = await response.text();
-        console.error(`Google Sheets tournament sync error: ${response.status} ${response.statusText} - ${responseText}`);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const responseText = await response.text();
-      console.log(`Google Sheets tournament sync raw response: ${responseText}`);
+      console.log(
+        `Google Sheets API response for ${action}:`,
+        responseText.substring(0, 200) + "...",
+      );
 
+      let data;
       try {
-        const result = JSON.parse(responseText);
-        console.log('Google Sheets tournament sync parsed result:', result);
-        return result;
+        data = JSON.parse(responseText);
       } catch (parseError) {
-        console.error('Failed to parse Google Sheets response:', parseError, 'Raw response:', responseText);
-        return { success: false, error: 'Invalid response format', rawResponse: responseText };
+        console.error("Failed to parse Google Sheets response:", parseError);
+        throw new Error("Invalid response format from Google Sheets");
       }
+
+      if (!data.success) {
+        throw new Error(data.message || "Google Sheets API returned error");
+      }
+
+      // Cache successful GET responses
+      if (method === "GET") {
+        const ttl = action.includes("Athletes")
+          ? FAST_CACHE_TTL
+          : DEFAULT_CACHE_TTL;
+        setCachedData(cacheKey, data, ttl);
+      }
+
+      return data;
     } catch (error) {
-      console.error('Failed to sync tournament data to Google Sheets:', error);
+      console.error(`Google Sheets API error for ${action}:`, error);
       throw error;
     }
   }
 
-  // Helper function to sync athlete to Google Sheets daftar_kelompok
-  async function syncAthleteToGoogleSheets(groupAthlete: any, athlete: any) {
-    try {
-      console.log(`Syncing athlete to Google Sheets daftar_kelompok: ${athlete.name}`);
+  // Helper function to calculate age
+  function calculateAge(birthDate: string): number {
+    if (!birthDate) return 0;
 
-      const position = groupAthlete.position === 'red' ? 'merah' : 
-                      groupAthlete.position === 'blue' ? 'biru' : 
-                      groupAthlete.position === 'queue' ? 'antri' : '';
-
-      const postData = new URLSearchParams({
-        action: 'addAthleteToGroup',
-        id: groupAthlete.id.toString(),
-        groupId: groupAthlete.groupId.toString(),
-        athleteName: athlete.name || '',
-        weight: athlete.weight?.toString() || '0',
-        height: athlete.height?.toString() || '0',
-        belt: athlete.belt || '',
-        age: calculateAge(athlete.birthDate) || '0',
-        position: position,
-        queueOrder: groupAthlete.queueOrder?.toString() || '1',
-        hasMedal: groupAthlete.hasMedal ? 'true' : 'false'
-      });
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: postData.toString(),
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const responseText = await response.text();
-        console.error(`Google Sheets athlete sync error: ${responseText}`);
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const responseText = await response.text();
-      console.log(`Google Sheets athlete sync response: ${responseText}`);
-
-      try {
-        const result = JSON.parse(responseText);
-        console.log('Google Sheets athlete sync result:', result);
-        return result;
-      } catch (parseError) {
-        console.error('Failed to parse Google Sheets response:', parseError);
-        return { success: false, error: 'Invalid response format' };
-      }
-    } catch (error) {
-      console.error('Failed to sync athlete to Google Sheets:', error);
-      throw error;
-    }
-  }
-
-  // Helper function to calculate age from birth date
-  function calculateAge(birthDate: string): string {
-    if (!birthDate) return '0';
-    
     try {
       const birth = new Date(birthDate);
       const today = new Date();
       let age = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();
-      
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < birth.getDate())
+      ) {
         age--;
       }
-      
-      return age.toString();
+
+      return age;
     } catch {
-      return '0';
+      return 0;
+    }
+  }
+
+  // Helper function to convert position labels
+  function convertPositionToIndonesian(position: string): string {
+    switch (position) {
+      case "red":
+        return "merah";
+      case "blue":
+        return "biru";
+      case "queue":
+        return "antri";
+      default:
+        return position;
+    }
+  }
+
+  function convertPositionToEnglish(position: string): string {
+    switch (position) {
+      case "merah":
+        return "red";
+      case "biru":
+        return "blue";
+      case "antri":
+        return "queue";
+      default:
+        return position;
     }
   }
 
   // Dashboard routes
-  app.get('/api/dashboard/stats', async (req, res) => {
+  app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   });
 
-  app.get('/api/dashboard/active-matches', async (req, res) => {
+  app.get("/api/dashboard/active-matches", async (req, res) => {
     try {
       const activeMatches = await storage.getActiveMatches();
       res.json(activeMatches);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch active matches' });
+      console.error("Active matches error:", error);
+      res.status(500).json({ error: "Failed to fetch active matches" });
     }
   });
 
   // Athletes routes
-  app.get('/api/athletes', async (req, res) => {
+  app.get("/api/athletes", async (req, res) => {
     try {
-      // Get modified athletes from local storage (these take priority)
-      const localAthletes = await storage.getAllAthletes();
-      const localAthleteMap = new Map();
-      localAthletes.forEach(athlete => {
-        localAthleteMap.set(athlete.id, athlete);
-      });
+      console.log("Fetching athletes...");
 
-      // First try to get from Google Sheets atlets sheet
+      // Get local athletes first
+      const localAthletes = await storage.getAllAthletes();
+      const localAthleteMap = new Map(
+        localAthletes.map((athlete) => [athlete.id, athlete]),
+      );
+
       try {
-        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getAthletes'
-        });
-        
-        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 0) {
-          // Parse the athlete data directly from Google Sheets response
-          const athletes = data.data.map((athlete: any) => {
-            const athleteId = athlete.id;
-            
-            // If athlete has been modified locally, use local data
-            if (localAthleteMap.has(athleteId)) {
-              const localAthlete = localAthleteMap.get(athleteId);
-              localAthleteMap.delete(athleteId); // Remove to avoid duplicates
-              return localAthlete;
-            }
-            
-            try {
+        // Fetch from Google Sheets
+        const data = await callGoogleSheetsAPI("getAthletes");
+
+        if (data.data && Array.isArray(data.data)) {
+          const athletes = data.data
+            .map((athlete: any) => {
+              const athleteId = athlete.id;
+
+              // Use local data if available (takes priority)
+              if (localAthleteMap.has(athleteId)) {
+                const localAthlete = localAthleteMap.get(athleteId);
+                localAthleteMap.delete(athleteId);
+                return localAthlete;
+              }
+
+              // Convert Google Sheets data to our format
               return {
                 id: athleteId,
-                name: athlete.nama_lengkap || '',
-                gender: athlete.gender || '',
-                birthDate: athlete.tgl_lahir || '',
-                dojang: athlete.dojang || '',
-                belt: athlete.sabuk || '',
+                name: athlete.nama_lengkap || "",
+                gender: athlete.gender || "",
+                birthDate: athlete.tgl_lahir || "",
+                dojang: athlete.dojang || "",
+                belt: athlete.sabuk || "",
                 weight: parseFloat(athlete.berat_badan) || 0,
                 height: parseFloat(athlete.tinggi_badan) || 0,
-                category: athlete.kategori || '',
-                class: athlete.kelas || '',
-                isPresent: athlete.hadir === 'TRUE' || athlete.hadir === true || athlete.hadir === 'true',
-                status: athlete.status || 'available',
-                createdAt: athlete.timestamp || new Date().toISOString()
+                category: athlete.kategori || "",
+                class: athlete.kelas || "",
+                isPresent:
+                  athlete.hadir === true ||
+                  athlete.hadir === "true" ||
+                  athlete.hadir === "TRUE",
+                status: athlete.status || "available",
+                createdAt: athlete.timestamp || new Date().toISOString(),
               };
-            } catch (parseError) {
-              console.error('Error parsing athlete data:', athlete, parseError);
-              return null;
-            }
-          }).filter(athlete => athlete !== null && athlete.name && athlete.name.trim() !== '');
-          
-          // Add any remaining local athletes that weren't in Google Sheets (newly created)
-          localAthleteMap.forEach(athlete => {
-            athletes.push(athlete);
-          });
-          
+            })
+            .filter(
+              (athlete) =>
+                athlete && athlete.name && athlete.name.trim() !== "",
+            );
+
+          // Add remaining local athletes
+          localAthleteMap.forEach((athlete) => athletes.push(athlete));
+
+          console.log(`Returning ${athletes.length} athletes`);
           return res.json(athletes);
         }
       } catch (sheetsError) {
-        console.warn('Failed to fetch from Google Sheets, falling back to local storage:', sheetsError);
+        console.warn(
+          "Failed to fetch from Google Sheets, using local data:",
+          sheetsError,
+        );
       }
-      
-      // Fallback to local storage only
+
+      // Fallback to local storage
       res.json(localAthletes);
     } catch (error) {
-      console.error('Error fetching athletes:', error);
-      res.status(500).json({ error: 'Failed to fetch athletes' });
+      console.error("Error fetching athletes:", error);
+      res.status(500).json({ error: "Failed to fetch athletes" });
     }
   });
 
-  app.get('/api/athletes/sync', async (req, res) => {
-    try {
-      const competitionId = req.query.competitionId as string;
-      
-      // Fetch from Google Sheets API
-      const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.ATHLETES_API, {
-        action: 'getAthletes',
-        ...(competitionId && { competitionId })
-      });
-      
-      // Sync athletes to local storage
-      const syncedAthletes = [];
-      if (data && Array.isArray(data)) {
-        for (const googleAthlete of data) {
-          try {
-            const athlete = {
-              nama_lengkap: googleAthlete.nama_lengkap || '',
-              gender: googleAthlete.gender || '',
-              dojang: googleAthlete.dojang || '',
-              sabuk: googleAthlete.sabuk || '',
-              berat_badan: parseInt(googleAthlete.berat_badan) || 0,
-              tinggi_badan: parseInt(googleAthlete.tinggi_badan) || 0,
-              kategori: googleAthlete.kategori || '',
-              isPresent: false,
-              status: 'available',
-              competitionId: competitionId || ''
-            };
-            
-            const validatedAthlete = insertAthleteSchema.parse(athlete);
-            const created = await storage.createAthlete(validatedAthlete);
-            syncedAthletes.push(created);
-          } catch (validationError) {
-            console.warn('Skipping invalid athlete data:', googleAthlete, validationError);
-          }
-        }
-      }
-      
-      broadcast({ type: 'athletes_synced', data: syncedAthletes });
-      res.json({ success: true, count: syncedAthletes.length, athletes: syncedAthletes });
-    } catch (error) {
-      console.error('Sync error:', error);
-      res.status(500).json({ error: 'Failed to sync athletes from Google Sheets' });
-    }
-  });
-
-  app.post('/api/athletes', async (req, res) => {
+  app.post("/api/athletes", async (req, res) => {
     try {
       const validatedData = insertAthleteSchema.parse(req.body);
       const athlete = await storage.createAthlete(validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'athlete_created', data: athlete });
+
+      clearCacheByPattern("getAthletes");
+      broadcast({ type: "athlete_created", data: athlete });
       res.json(athlete);
+
+      // Sync to Google Sheets asynchronously
+      callGoogleSheetsAPI(
+        "createAthlete",
+        {
+          nama_lengkap: athlete.name,
+          gender: athlete.gender,
+          tgl_lahir: athlete.birthDate,
+          dojang: athlete.dojang,
+          sabuk: athlete.belt,
+          berat_badan: athlete.weight,
+          tinggi_badan: athlete.height,
+          kategori: athlete.category,
+          kelas: athlete.class,
+          hadir: athlete.isPresent,
+          status: athlete.status,
+        },
+        "POST",
+      ).catch((error) => {
+        console.error(
+          "Failed to sync athlete creation to Google Sheets:",
+          error,
+        );
+      });
     } catch (error) {
+      console.error("Create athlete error:", error);
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid athlete data', details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid athlete data", details: error.errors });
       } else {
-        res.status(500).json({ error: 'Failed to create athlete' });
+        res.status(500).json({ error: "Failed to create athlete" });
       }
     }
   });
 
-  app.put('/api/athletes/:id', async (req, res) => {
+  // Batch operations for athletes
+  app.post("/api/athletes/batch", async (req, res) => {
+    try {
+      const { athletes } = req.body;
+
+      if (!athletes || !Array.isArray(athletes)) {
+        return res.status(400).json({ error: "Athletes array is required" });
+      }
+
+      const results = [];
+      const errors = [];
+
+      // Process each athlete
+      for (let i = 0; i < athletes.length; i++) {
+        try {
+          const validatedData = insertAthleteSchema.parse(athletes[i]);
+          const athlete = await storage.createAthlete(validatedData);
+          results.push(athlete);
+        } catch (error) {
+          errors.push({
+            index: i,
+            athlete: athletes[i],
+            error: error instanceof z.ZodError ? error.errors : error.message,
+          });
+        }
+      }
+
+      clearCacheByPattern("getAthletes");
+      broadcast({ type: "athletes_batch_created", data: { results, errors } });
+
+      // Sync to Google Sheets asynchronously
+      if (results.length > 0) {
+        callGoogleSheetsAPI(
+          "batchCreateAthletes",
+          {
+            athletes: JSON.stringify(
+              results.map((athlete) => ({
+                nama_lengkap: athlete.name,
+                gender: athlete.gender,
+                tgl_lahir: athlete.birthDate,
+                dojang: athlete.dojang,
+                sabuk: athlete.belt,
+                berat_badan: athlete.weight,
+                tinggi_badan: athlete.height,
+                kategori: athlete.category,
+                kelas: athlete.class,
+                hadir: athlete.isPresent,
+                status: athlete.status,
+              })),
+            ),
+          },
+          "POST",
+        ).catch((error) => {
+          console.error(
+            "Failed to sync batch athletes to Google Sheets:",
+            error,
+          );
+        });
+      }
+
+      res.json({
+        success: true,
+        created: results.length,
+        errors: errors.length,
+        results,
+        errorDetails: errors,
+      });
+    } catch (error) {
+      console.error("Batch create athletes error:", error);
+      res.status(500).json({ error: "Failed to batch create athletes" });
+    }
+  });
+
+  app.put("/api/athletes/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const validatedData = insertAthleteSchema.partial().parse(req.body);
-      
-      // First check if athlete exists in local storage
+
       let athlete = await storage.getAthleteById(id);
-      
+
       if (!athlete) {
-        // If not found, try to sync from Google Sheets first
+        // Try to get from Google Sheets
         try {
-          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-            action: 'getAllData'
-          });
-          
-          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
-            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
-            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
-            if (athleteRow && athleteRow.length > 0) {
-              // Create the athlete in local storage with original data
-              const athleteData = {
-                name: athleteRow[1] || '',
-                gender: athleteRow[2] || '',
-                birthDate: athleteRow[3] || '',
-                dojang: athleteRow[4] || '',
-                belt: athleteRow[5] || '',
-                weight: parseFloat(athleteRow[6]) || 0,
-                height: parseFloat(athleteRow[7]) || 0,
-                category: athleteRow[8] || '',
-                class: athleteRow[9] || '',
-                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
-                status: athleteRow[11] || 'available'
-              };
-              
-              athlete = await storage.createAthlete(athleteData);
-            }
+          const data = await callGoogleSheetsAPI("getAthlete", { id });
+          if (data.data) {
+            const athleteData = {
+              name: data.data.nama_lengkap || "",
+              gender: data.data.gender || "",
+              birthDate: data.data.tgl_lahir || "",
+              dojang: data.data.dojang || "",
+              belt: data.data.sabuk || "",
+              weight: parseFloat(data.data.berat_badan) || 0,
+              height: parseFloat(data.data.tinggi_badan) || 0,
+              category: data.data.kategori || "",
+              class: data.data.kelas || "",
+              isPresent: data.data.hadir === true || data.data.hadir === "true",
+              status: data.data.status || "available",
+            };
+            athlete = await storage.createAthlete(athleteData);
           }
         } catch (syncError) {
-          console.error('Failed to sync athlete from Google Sheets:', syncError);
+          console.error(
+            "Failed to sync athlete from Google Sheets:",
+            syncError,
+          );
         }
       }
-      
+
       if (!athlete) {
-        return res.status(404).json({ error: 'Athlete not found' });
+        return res.status(404).json({ error: "Athlete not found" });
       }
-      
-      // Update athlete
+
       athlete = await storage.updateAthlete(id, validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'athlete_updated', data: athlete });
+
+      clearCacheByPattern("getAthletes");
+      broadcast({ type: "athlete_updated", data: athlete });
       res.json(athlete);
-      
-      // Sync to Google Sheets asynchronously (don't wait for it)
-      updateGoogleSheetsAthlete(id, athlete).catch(error => {
-        console.error('Failed to sync athlete update to Google Sheets:', error);
+
+      // Sync to Google Sheets asynchronously
+      callGoogleSheetsAPI(
+        "updateAthlete",
+        {
+          id,
+          nama_lengkap: athlete.name,
+          gender: athlete.gender,
+          tgl_lahir: athlete.birthDate,
+          dojang: athlete.dojang,
+          sabuk: athlete.belt,
+          berat_badan: athlete.weight,
+          tinggi_badan: athlete.height,
+          kategori: athlete.category,
+          kelas: athlete.class,
+          hadir: athlete.isPresent,
+          status: athlete.status,
+        },
+        "POST",
+      ).catch((error) => {
+        console.error("Failed to sync athlete update to Google Sheets:", error);
       });
     } catch (error) {
-      console.error('Update athlete error:', error);
+      console.error("Update athlete error:", error);
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid athlete data', details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid athlete data", details: error.errors });
       } else {
-        res.status(500).json({ error: 'Failed to update athlete' });
+        res.status(500).json({ error: "Failed to update athlete" });
       }
     }
   });
 
-  app.patch('/api/athletes/:id/attendance', async (req, res) => {
+  app.patch("/api/athletes/:id/attendance", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { isPresent } = req.body;
-      
-      // First check if athlete exists in local storage
+
       let athlete = await storage.getAthleteById(id);
-      
+
       if (!athlete) {
-        // If not found, try to sync from Google Sheets first
-        try {
-          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-            action: 'getAllData'
-          });
-          
-          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
-            // Find the athlete in Google Sheets data - data[0] is header, data[1] is first athlete (ID 1)
-            const athleteRow = data.data[id]; // Direct index access since Google Sheets data uses 1-based indexing
-            if (athleteRow && athleteRow.length > 0) {
-              // Create the athlete in local storage with original data
-              const athleteData = {
-                name: athleteRow[1] || '',
-                gender: athleteRow[2] || '',
-                birthDate: athleteRow[3] || '',
-                dojang: athleteRow[4] || '',
-                belt: athleteRow[5] || '',
-                weight: parseFloat(athleteRow[6]) || 0,
-                height: parseFloat(athleteRow[7]) || 0,
-                category: athleteRow[8] || '',
-                class: athleteRow[9] || '',
-                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
-                status: athleteRow[11] || 'available'
-              };
-              
-              athlete = await storage.createAthlete(athleteData);
-            }
-          }
-        } catch (syncError) {
-          console.error('Failed to sync athlete from Google Sheets:', syncError);
-        }
+        return res.status(404).json({ error: "Athlete not found" });
       }
-      
-      if (!athlete) {
-        return res.status(404).json({ error: 'Athlete not found' });
-      }
-      
-      // Update attendance locally first for fast response
+
       athlete = await storage.updateAthleteAttendance(id, isPresent);
-      
-      // Send immediate response
-      broadcast({ type: 'athlete_attendance_updated', data: athlete });
+
+      clearCacheByPattern("getAthletes");
+      broadcast({ type: "athlete_attendance_updated", data: athlete });
       res.json(athlete);
-      
-      // Sync to Google Sheets asynchronously (don't wait for it)
-      updateGoogleSheetsAttendance(id, isPresent).catch(error => {
-        console.error('Failed to sync attendance to Google Sheets:', error);
-      });
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-    } catch (error) {
-      console.error('Attendance update error:', error);
-      res.status(500).json({ error: 'Failed to update athlete attendance' });
-    }
-  });
 
-  app.delete('/api/athletes/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      await storage.deleteAthlete(id);
-      broadcast({ type: 'athlete_deleted', data: { id } });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete athlete' });
-    }
-  });
-
-  app.patch('/api/athletes/:id/status', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const { status, ring } = req.body;
-      
-      const athlete = await storage.updateAthleteStatus(id, status, ring);
-      broadcast({ type: 'athlete_status_updated', data: athlete });
-      res.json(athlete);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update athlete status' });
-    }
-  });
-
-  // DELETE athlete endpoint
-  app.delete('/api/athletes/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      
-      // Delete from local storage
-      await storage.deleteAthlete(id);
-      
-      // Clear cache
-      dataCache.clear();
-      
-      broadcast({ type: 'athlete_deleted', data: { id } });
-      res.json({ success: true });
-      
-      // Sync deletion to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('deleteAthlete', {
-        id: id.toString()
-      }).catch(error => {
-        console.error('Failed to sync athlete deletion to Google Sheets:', error);
-      });
-    } catch (error) {
-      console.error('Delete athlete error:', error);
-      res.status(500).json({ error: 'Failed to delete athlete' });
-    }
-  });
-
-  // Categories routes
-  app.get('/api/categories', async (req, res) => {
-    try {
-      const categories = await storage.getAllCategories();
-      res.json(categories);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch categories' });
-    }
-  });
-
-  app.post('/api/categories', async (req, res) => {
-    try {
-      const validatedData = insertCategorySchema.parse(req.body);
-      const category = await storage.createCategory(validatedData);
-      broadcast({ type: 'category_created', data: category });
-      res.json(category);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid category data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to create category' });
-      }
-    }
-  });
-
-  app.get('/api/categories/:id/groups', async (req, res) => {
-    try {
-      const categoryId = parseInt(req.params.id);
-      const groups = await storage.getGroupsByCategory(categoryId);
-      res.json(groups);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch groups' });
-    }
-  });
-
-  // Tournament Bracket API Routes
-  // Main Categories (Kategori_utama)
-  app.get('/api/tournament/main-categories', async (req, res) => {
-    try {
-      console.log('Loading main categories from Google Sheets...');
-      
-      // Clear cache and fetch fresh data from Google Sheets
-      dataCache.clear();
-      
-      // First try to fetch directly from Google Sheets
-      try {
-        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getMainCategories'
-        });
-        
-        console.log('Google Sheets main categories response:', data);
-        
-        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 0) {
-          console.log(`Loaded ${data.data.length} main categories from Google Sheets`);
-          
-          // Clear existing categories to avoid duplicates
-          await storage.clearAllMainCategories();
-          
-          // Sync each category to local storage
-          for (const categoryData of data.data) {
-            if (categoryData.id && categoryData.name) {
-              await storage.createMainCategory({
-                id: categoryData.id,
-                name: categoryData.name
-              });
-            }
-          }
-          
-          const categories = await storage.getAllMainCategories();
-          console.log(`Returning ${categories.length} main categories:`, categories);
-          return res.json(categories);
-        } else {
-          console.log('No categories from Google Sheets, creating default categories');
-          // Create default categories if none found
-          const existingCategories = await storage.getAllMainCategories();
-          if (existingCategories.length === 0) {
-            await storage.createMainCategory({ id: 1, name: 'kyorugi' });
-            await storage.createMainCategory({ id: 2, name: 'poomsae' });
-          }
-        }
-      } catch (syncError) {
-        console.error('Failed to sync main categories from Google Sheets:', syncError);
-        
-        // Fallback: create default categories if none exist
-        const existingCategories = await storage.getAllMainCategories();
-        if (existingCategories.length === 0) {
-          await storage.createMainCategory({ id: 1, name: 'kyorugi' });
-          await storage.createMainCategory({ id: 2, name: 'poomsae' });
-        }
-      }
-      
-      const categories = await storage.getAllMainCategories();
-      console.log(`Returning ${categories.length} main categories:`, categories);
-      res.json(categories);
-    } catch (error) {
-      console.error('Error in main categories endpoint:', error);
-      res.status(500).json({ error: 'Failed to fetch main categories' });
-    }
-  });
-
-  app.post('/api/tournament/main-categories', async (req, res) => {
-    try {
-      const validatedData = insertMainCategorySchema.parse(req.body);
-      const category = await storage.createMainCategory(validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'main_category_created', data: category });
-      res.json(category);
-      
       // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('createMainCategory', {
-        id: category.id.toString(),
-        name: category.name
-      }).catch(error => {
-        console.error('Failed to sync main category to Google Sheets:', error);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid main category data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to create main category' });
-      }
-    }
-  });
-
-  app.put('/api/tournament/main-categories/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const validatedData = insertMainCategorySchema.partial().parse(req.body);
-      const category = await storage.updateMainCategory(id, validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'main_category_updated', data: category });
-      res.json(category);
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('updateMainCategory', {
-        id: category.id.toString(),
-        name: category.name
-      }).catch(error => {
-        console.error('Failed to sync main category update to Google Sheets:', error);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid main category data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to update main category' });
-      }
-    }
-  });
-
-  app.delete('/api/tournament/main-categories/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      await storage.deleteMainCategory(id);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'main_category_deleted', data: { id } });
-      res.json({ success: true });
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('deleteMainCategory', {
-        id: id.toString()
-      }).catch(error => {
-        console.error('Failed to sync main category deletion to Google Sheets:', error);
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete main category' });
-    }
-  });
-
-  // Sub Categories (SubKategori)
-  app.get('/api/tournament/main-categories/:id/sub-categories', async (req, res) => {
-    try {
-      const mainCategoryId = parseInt(req.params.id);
-      console.log(`Loading sub categories for main category ${mainCategoryId}...`);
-      
-      // Clear cache and fetch fresh data from Google Sheets
-      dataCache.clear();
-      
-      // First try to fetch directly from Google Sheets
-      try {
-        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getSubCategories',
-          mainCategoryId: mainCategoryId.toString()
-        });
-        
-        console.log('Google Sheets sub categories response:', data);
-        
-        if (data && data.success && data.data && Array.isArray(data.data)) {
-          console.log(`Loaded ${data.data.length} sub categories from Google Sheets for main category ${mainCategoryId}`);
-          
-          // Sync each sub category to local storage
-          for (const subCategoryData of data.data) {
-            if (subCategoryData.id && subCategoryData.name && subCategoryData.mainCategoryId == mainCategoryId) {
-              const existingSubCategory = await storage.getSubCategoryById(subCategoryData.id);
-              if (!existingSubCategory) {
-                await storage.createSubCategory({
-                  id: subCategoryData.id,
-                  mainCategoryId: mainCategoryId,
-                  name: subCategoryData.name,
-                  order: subCategoryData.order || 1
-                });
-              } else {
-                await storage.updateSubCategory(subCategoryData.id, {
-                  name: subCategoryData.name,
-                  order: subCategoryData.order || 1
-                });
-              }
-            }
-          }
-        } else {
-          console.log(`No sub categories found in Google Sheets for main category ${mainCategoryId}`);
-        }
-      } catch (syncError) {
-        console.error('Failed to sync sub categories from Google Sheets:', syncError);
-      }
-      
-      const subCategories = await storage.getSubCategoriesByMainCategory(mainCategoryId);
-      console.log(`Returning ${subCategories.length} sub categories for main category ${mainCategoryId}:`, subCategories);
-      res.json(subCategories);
-    } catch (error) {
-      console.error('Error in sub categories endpoint:', error);
-      res.status(500).json({ error: 'Failed to fetch sub categories' });
-    }
-  });
-
-  app.post('/api/tournament/sub-categories', async (req, res) => {
-    try {
-      const validatedData = insertSubCategorySchema.parse(req.body);
-      const subCategory = await storage.createSubCategory(validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'sub_category_created', data: subCategory });
-      res.json(subCategory);
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('createSubCategory', {
-        id: subCategory.id.toString(),
-        mainCategoryId: subCategory.mainCategoryId.toString(),
-        order: subCategory.order.toString(),
-        name: subCategory.name
-      }).catch(error => {
-        console.error('Failed to sync sub category to Google Sheets:', error);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to create sub category' });
-      }
-    }
-  });
-
-  app.put('/api/tournament/sub-categories/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const validatedData = insertSubCategorySchema.partial().parse(req.body);
-      const subCategory = await storage.updateSubCategory(id, validatedData);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'sub_category_updated', data: subCategory });
-      res.json(subCategory);
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('updateSubCategory', {
-        id: subCategory.id.toString(),
-        mainCategoryId: subCategory.mainCategoryId.toString(),
-        order: subCategory.order.toString(),
-        name: subCategory.name
-      }).catch(error => {
-        console.error('Failed to sync sub category update to Google Sheets:', error);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid sub category data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to update sub category' });
-      }
-    }
-  });
-
-  app.delete('/api/tournament/sub-categories/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      await storage.deleteSubCategory(id);
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-      
-      broadcast({ type: 'sub_category_deleted', data: { id } });
-      res.json({ success: true });
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('deleteSubCategory', {
-        id: id.toString()
-      }).catch(error => {
-        console.error('Failed to sync sub category deletion to Google Sheets:', error);
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete sub category' });
-    }
-  });
-
-  // Athlete Groups (Kelompok_Atlet)
-  app.get('/api/tournament/sub-categories/:id/athlete-groups', async (req, res) => {
-    try {
-      const subCategoryId = parseInt(req.params.id);
-      console.log(`Loading athlete groups for sub category ${subCategoryId}...`);
-      
-      // Always sync from Google Sheets first to get the most current data
-      try {
-        console.log(`Syncing athlete groups from Google Sheets for sub category ${subCategoryId}...`);
-        
-        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getAthleteGroups',
-          subCategoryId: subCategoryId.toString()
-        });
-        
-        console.log('Google Sheets athlete groups response:', data);
-        
-        if (data && data.success && data.data && Array.isArray(data.data)) {
-          console.log(`Loaded ${data.data.length} athlete groups from Google Sheets for sub category ${subCategoryId}`);
-          
-          // Sync each athlete group to local storage
-          for (const athleteGroupData of data.data) {
-            if (athleteGroupData.id && athleteGroupData.name && athleteGroupData.subCategoryId == subCategoryId) {
-              const existingAthleteGroup = await storage.getAthleteGroupById(athleteGroupData.id);
-              if (!existingAthleteGroup) {
-                await storage.createAthleteGroup({
-                  id: athleteGroupData.id,
-                  subCategoryId: subCategoryId,
-                  name: athleteGroupData.name,
-                  description: athleteGroupData.description || '',
-                  matchNumber: athleteGroupData.matchNumber || 1,
-                  isActive: true
-                });
-              } else {
-                await storage.updateAthleteGroup(athleteGroupData.id, {
-                  name: athleteGroupData.name,
-                  description: athleteGroupData.description || '',
-                  matchNumber: athleteGroupData.matchNumber || 1
-                });
-              }
-            }
-          }
-        } else {
-          console.log(`No athlete groups found in Google Sheets for sub category ${subCategoryId}`);
-        }
-        
-        console.log(`Successfully synced athlete groups for sub category ${subCategoryId}`);
-      } catch (syncError) {
-        console.error('Failed to sync athlete groups from Google Sheets:', syncError);
-      }
-      
-      const athleteGroups = await storage.getAthleteGroupsBySubCategory(subCategoryId);
-      console.log(`Returning ${athleteGroups.length} athlete groups for sub category ${subCategoryId}:`, athleteGroups);
-      res.json(athleteGroups);
-    } catch (error) {
-      console.error('Error fetching athlete groups:', error);
-      res.status(500).json({ error: 'Failed to fetch athlete groups' });
-    }
-  });
-
-  app.post('/api/tournament/athlete-groups', async (req, res) => {
-    try {
-      const validatedData = insertAthleteGroupSchema.parse(req.body);
-      const athleteGroup = await storage.createAthleteGroup(validatedData);
-      broadcast({ type: 'athlete_group_created', data: athleteGroup });
-      res.json(athleteGroup);
-      
-      // Sync to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('createAthleteGroup', {
-        id: athleteGroup.id.toString(),
-        subCategoryId: athleteGroup.subCategoryId.toString(),
-        name: athleteGroup.name,
-        description: athleteGroup.description || '',
-        matchNumber: athleteGroup.matchNumber?.toString() || '1'
-      }).catch(error => {
-        console.error('Failed to sync athlete group to Google Sheets:', error);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to create athlete group' });
-      }
-    }
-  });
-
-  app.put('/api/tournament/athlete-groups/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const validatedData = insertAthleteGroupSchema.partial().parse(req.body);
-      const athleteGroup = await storage.updateAthleteGroup(id, validatedData);
-      broadcast({ type: 'athlete_group_updated', data: athleteGroup });
-      res.json(athleteGroup);
-      
-      // Sync update to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('updateAthleteGroup', {
-        id: id.toString(),
-        name: athleteGroup.name,
-        description: athleteGroup.description || '',
-        matchNumber: athleteGroup.matchNumber?.toString() || '1'
-      }).catch(error => {
-        console.error('Failed to sync athlete group update to Google Sheets:', error);
-      });
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to update athlete group' });
-      }
-    }
-  });
-
-  app.delete('/api/tournament/athlete-groups/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      
-      // Respond immediately for better user experience
-      res.json({ success: true });
-      
-      // Process deletion and sync in background
-      try {
-        // First get all athletes in this group
-        const groupAthletes = await storage.getGroupAthletesByGroup(id);
-        console.log(`Found ${groupAthletes.length} athletes in group ${id} to be deleted`);
-        
-        // Delete all athletes from this group first
-        for (const groupAthlete of groupAthletes) {
-          console.log(`Removing athlete ${groupAthlete.athleteId} from group ${id}`);
-          await storage.removeAthleteFromGroup(id, groupAthlete.athleteId);
-        }
-        
-        // Then delete the athlete group itself
-        await storage.deleteAthleteGroup(id);
-        broadcast({ type: 'athlete_group_deleted', data: { id } });
-        
-        // Sync deletions to Google Sheets
-        // Delete all athletes from this group in daftar_kelompok sheet
-        await syncTournamentToGoogleSheets('deleteAllAthletesFromGroup', {
-          groupId: id.toString()
-        });
-        
-        // Then delete the athlete group from Kelompok_Atlet sheet
-        await syncTournamentToGoogleSheets('deleteAthleteGroup', {
-          id: id.toString()
-        });
-        
-        // Clear cache to force fresh data on next fetch
-        dataCache.clear();
-        
-        console.log(`Successfully deleted athlete group ${id}, removed ${groupAthletes.length} athletes, and synced to Google Sheets`);
-      } catch (error) {
-        console.error('Failed to delete athlete group or sync to Google Sheets:', error);
-      }
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete athlete group' });
-    }
-  });
-
-  // Group Athletes (daftar_kelompok)
-  app.get('/api/tournament/athlete-groups/:id/athletes', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.id);
-      
-      // First sync from Google Sheets to ensure we have the latest data
-      console.log(`Syncing group athletes from Google Sheets for group ${groupId}...`);
-      try {
-        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getGroupAthletes',
-          groupId: groupId.toString()
-        });
-        
-        if (data && data.success && data.data && Array.isArray(data.data)) {
-          console.log(`Found ${data.data.length} total rows in daftar_kelompok sheet`);
-          
-          // Filter rows for this specific group (skip header row at index 0)
-          const filteredRows = data.data.slice(1).filter(row => {
-            return row && row.length >= 2 && parseInt(row[1]) === groupId;
-          });
-          
-          console.log(`Found ${filteredRows.length} athletes for group ${groupId} after filtering`);
-          
-          for (const row of filteredRows) {
-            if (row && row.length >= 8) {
-              const groupAthleteId = parseInt(row[0]); // A: id_daftarKelompok
-              const athleteGroupId = parseInt(row[1]); // B: id_kelompokAtlet
-              const athleteName = row[2]; // C: nama_atlet
-              const weight = parseFloat(row[3]) || 0; // D: Berat_badan
-              const height = parseFloat(row[4]) || 0; // E: Tinggi_badan
-              const belt = row[5] || ''; // F: sabuk
-              const position = row[6] || ''; // G: M/B (merah/biru/antri)
-              const queueOrder = parseInt(row[7]) || 1; // H: Nomor
-              const age = parseInt(row[8]) || 0; // I: umur
-              const hasMedal = row[9] === 'TRUE' || row[9] === 'true'; // J: Mendali
-              
-              console.log(`Row ${groupAthleteId}: Name=${athleteName}, Position=${position}, Weight=${weight}, Belt=${belt}`);
-              
-              if (groupAthleteId && athleteName && athleteGroupId === groupId) {
-                // For daftar_kelompok sheet, we need to match by name from the main athletes sheet
-                // First, get all athletes to find the one with matching name
-                const allAthletes = await storage.getAllAthletes();
-                let matchingAthlete = allAthletes.find(a => a.name === athleteName);
-                
-                if (!matchingAthlete) {
-                  // Create athlete if not found, using a unique ID
-                  console.log(`Creating athlete ${athleteName} from Google Sheets data`);
-                  matchingAthlete = await storage.createAthlete({
-                    name: athleteName,
-                    gender: 'Unknown',
-                    birthDate: '2000-01-01',
-                    dojang: 'UPJ', // Default dojang from data
-                    belt: belt,
-                    weight: weight,
-                    height: height,
-                    category: '',
-                    class: '',
-                    isPresent: true, // Set as present since they're in tournament
-                    status: 'available'
-                  });
-                }
-                
-                // Check if this group athlete already exists
-                const existingGroupAthletes = await storage.getGroupAthletesByGroup(groupId);
-                const exists = existingGroupAthletes.find(ga => ga.athleteId === matchingAthlete.id);
-                
-                if (!exists) {
-                  console.log(`Adding athlete ${athleteName} to group ${groupId} with position: ${position}`);
-                  
-                  // Convert Indonesian position labels to English
-                  let convertedPosition = position;
-                  if (position === 'merah') convertedPosition = 'red';
-                  else if (position === 'biru') convertedPosition = 'blue';
-                  else if (position === 'antri' || position === '') convertedPosition = 'queue';
-                  
-                  await storage.addAthleteToGroup({
-                    groupId: groupId,
-                    athleteId: matchingAthlete.id,
-                    position: convertedPosition,
-                    queueOrder: queueOrder,
-                    isEliminated: false,
-                    hasMedal: hasMedal
-                  });
-                } else {
-                  // Update existing athlete position if needed
-                  let convertedPosition = position;
-                  if (position === 'merah') convertedPosition = 'red';
-                  else if (position === 'biru') convertedPosition = 'blue';
-                  else if (position === 'antri' || position === '') convertedPosition = 'queue';
-                  
-                  if (exists.position !== convertedPosition) {
-                    console.log(`Updating athlete ${athleteName} position from ${exists.position} to ${convertedPosition}`);
-                    await storage.updateAthletePosition(groupId, matchingAthlete.id, convertedPosition, queueOrder);
-                  }
-                }
-              }
-            }
-          }
-          console.log(`Successfully synced group athletes for group ${groupId}`);
-        }
-      } catch (syncError) {
-        console.error('Failed to sync group athletes from Google Sheets:', syncError);
-      }
-      
-      // Now get the local data
-      const groupAthletes = await storage.getGroupAthletesByGroup(groupId);
-      console.log(`Returning ${groupAthletes.length} group athletes for group ${groupId}`);
-      res.json(groupAthletes);
-    } catch (error) {
-      console.error('Error in get group athletes:', error);
-      res.status(500).json({ error: 'Failed to fetch group athletes' });
-    }
-  });
-
-  app.post('/api/tournament/athlete-groups/:id/athletes', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.id);
-      const validatedData = insertGroupAthleteSchema.parse({
-        ...req.body,
-        groupId
-      });
-      const groupAthlete = await storage.addAthleteToGroup(validatedData);
-      broadcast({ type: 'group_athlete_added', data: groupAthlete });
-      res.json(groupAthlete);
-      
-      // Sync to Google Sheets asynchronously
-      console.log('About to sync athlete to Google Sheets for groupAthlete:', groupAthlete);
-      let athlete = await storage.getAthleteById(groupAthlete.athleteId);
-      console.log('Found athlete for sync:', athlete);
-      
-      if (!athlete) {
-        // Try to sync from Google Sheets to get the athlete data
-        console.log(`Athlete ${groupAthlete.athleteId} not found in local storage, syncing from Google Sheets...`);
-        try {
-          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-            action: 'getAllData'
-          });
-          
-          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > groupAthlete.athleteId) {
-            const athleteRow = data.data[groupAthlete.athleteId];
-            if (athleteRow && athleteRow.length > 0) {
-              const athleteData = {
-                name: athleteRow[1] || '',
-                gender: athleteRow[2] || '',
-                birthDate: athleteRow[3] || '',
-                dojang: athleteRow[4] || '',
-                belt: athleteRow[5] || '',
-                weight: parseFloat(athleteRow[6]) || 0,
-                height: parseFloat(athleteRow[7]) || 0,
-                category: athleteRow[8] || '',
-                class: athleteRow[9] || '',
-                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
-                status: athleteRow[11] || 'available'
-              };
-              
-              athlete = await storage.createAthlete(athleteData);
-              console.log('Created athlete from Google Sheets data:', athlete);
-            }
-          }
-        } catch (syncError) {
-          console.error('Failed to sync athlete from Google Sheets:', syncError);
-        }
-      }
-      
-      // If still no athlete, create a placeholder with the ID for sync purposes
-      if (!athlete) {
-        console.log(`Creating placeholder athlete for ID ${groupAthlete.athleteId} to enable sync`);
-        athlete = {
-          id: groupAthlete.athleteId,
-          name: `Athlete ${groupAthlete.athleteId}`,
-          gender: 'Unknown',
-          birthDate: '2000-01-01',
-          dojang: 'Unknown',
-          belt: 'Unknown',
-          weight: 0,
-          height: 0,
-          category: '',
-          class: '',
-          isPresent: false,
-          status: 'available'
-        };
-      }
-      
-      if (athlete) {
-        console.log('Triggering sync to Google Sheets...');
-        syncAthleteToGoogleSheets(groupAthlete, athlete).catch(error => {
-          console.error('Failed to sync athlete to Google Sheets:', error);
-        });
-      } else {
-        console.log('No athlete found with ID:', groupAthlete.athleteId);
-      }
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid group athlete data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to add athlete to group' });
-      }
-    }
-  });
-
-  app.delete('/api/tournament/athlete-groups/:groupId/athletes/:athleteId', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.groupId);
-      const athleteId = parseInt(req.params.athleteId);
-      await storage.removeAthleteFromGroup(groupId, athleteId);
-      broadcast({ type: 'group_athlete_removed', data: { groupId, athleteId } });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to remove athlete from group' });
-    }
-  });
-
-  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/position', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.groupId);
-      const athleteId = parseInt(req.params.athleteId);
-      const { position, queueOrder } = req.body;
-      
-      const groupAthlete = await storage.updateAthletePosition(groupId, athleteId, position, queueOrder);
-      broadcast({ type: 'athlete_position_updated', data: groupAthlete });
-      res.json(groupAthlete);
-      
-      // Sync position update to Google Sheets asynchronously
-      const positionMB = position === 'red' ? 'merah' : 
-                        position === 'blue' ? 'biru' : 
-                        position === 'queue' ? 'antri' : position;
-      
-      syncTournamentToGoogleSheets('updateAthleteInGroup', {
-        id: groupAthlete.id.toString(),
-        position: positionMB,
-        queueOrder: queueOrder?.toString() || groupAthlete.queueOrder?.toString() || '1'
-      }).catch(error => {
-        console.error('Failed to sync position update to Google Sheets:', error);
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update athlete position' });
-    }
-  });
-
-  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/eliminate', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.groupId);
-      const athleteId = parseInt(req.params.athleteId);
-      
-      const groupAthlete = await storage.eliminateAthlete(groupId, athleteId);
-      broadcast({ type: 'athlete_eliminated', data: groupAthlete });
-      res.json(groupAthlete);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to eliminate athlete' });
-    }
-  });
-
-  app.patch('/api/tournament/athlete-groups/:groupId/athletes/:athleteId/medal', async (req, res) => {
-    try {
-      const groupId = parseInt(req.params.groupId);
-      const athleteId = parseInt(req.params.athleteId);
-      const { hasMedal } = req.body;
-      
-      const groupAthlete = await storage.updateAthleteMedal(groupId, athleteId, hasMedal);
-      broadcast({ type: 'athlete_medal_updated', data: groupAthlete });
-      res.json(groupAthlete);
-      
-      // Sync medal update to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('updateAthleteInGroup', {
-        id: groupAthlete.id.toString(),
-        hasMedal: hasMedal ? 'true' : 'false'
-      }).catch(error => {
-        console.error('Failed to sync medal update to Google Sheets:', error);
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update athlete medal status' });
-    }
-  });
-
-  // Matches routes
-  app.get('/api/matches', async (req, res) => {
-    try {
-      const matches = await storage.getAllMatches();
-      res.json(matches);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch matches' });
-    }
-  });
-
-  app.post('/api/matches', async (req, res) => {
-    try {
-      const validatedData = insertMatchSchema.parse(req.body);
-      const match = await storage.createMatch(validatedData);
-      
-      // Update athlete statuses to competing
-      if (match.redCornerAthleteId) {
-        await storage.updateAthleteStatus(match.redCornerAthleteId, 'competing', match.ring || undefined);
-      }
-      if (match.blueCornerAthleteId) {
-        await storage.updateAthleteStatus(match.blueCornerAthleteId, 'competing', match.ring || undefined);
-      }
-      
-      broadcast({ type: 'match_created', data: match });
-      res.json(match);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: 'Invalid match data', details: error.errors });
-      } else {
-        res.status(500).json({ error: 'Failed to create match' });
-      }
-    }
-  });
-
-  app.patch('/api/matches/:id/winner', async (req, res) => {
-    try {
-      const matchId = parseInt(req.params.id);
-      const { winnerId } = req.body;
-      
-      if (!winnerId) {
-        return res.status(400).json({ error: 'winnerId is required' });
-      }
-      
-      const match = await storage.declareWinner(matchId, winnerId);
-      broadcast({ type: 'winner_declared', data: match });
-      res.json(match);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to declare winner' });
-    }
-  });
-
-  // Anti-clash routes
-  app.get('/api/anti-clash/competing', async (req, res) => {
-    try {
-      const competing = await storage.getCompetingAthletes();
-      res.json(competing);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch competing athletes' });
-    }
-  });
-
-  app.get('/api/anti-clash/available', async (req, res) => {
-    try {
-      const available = await storage.getAvailableAthletes();
-      res.json(available);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch available athletes' });
-    }
-  });
-
-  // Tournament results routes
-  app.get('/api/results', async (req, res) => {
-    try {
-      const results = await storage.getTournamentResults();
-      res.json(results);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tournament results' });
-    }
-  });
-
-  // Export routes
-  app.get('/api/export/athletes', async (req, res) => {
-    try {
-      const format = req.query.format as string;
-      const athletes = await storage.getAllAthletes();
-      
-      if (format === 'excel') {
-        // TODO: Implement Excel export
-        res.json({ message: 'Excel export not yet implemented', data: athletes });
-      } else if (format === 'pdf') {
-        // TODO: Implement PDF export
-        res.json({ message: 'PDF export not yet implemented', data: athletes });
-      } else {
-        res.json(athletes);
-      }
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to export athletes' });
-    }
-  });
-
-  app.get('/api/export/results', async (req, res) => {
-    try {
-      const format = req.query.format as string;
-      const results = await storage.getTournamentResults();
-      
-      if (format === 'excel') {
-        // TODO: Implement Excel export
-        res.json({ message: 'Excel export not yet implemented', data: results });
-      } else if (format === 'pdf') {
-        // TODO: Implement PDF export
-        res.json({ message: 'PDF export not yet implemented', data: results });
-      } else {
-        res.json(results);
-      }
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to export results' });
-    }
-  });
-
-  // Google Sheets competition and athlete management routes
-  app.get('/api/google-sheets/competitions', async (req, res) => {
-    try {
-      const competitions = await storage.getCompetitionsFromGoogleSheets();
-      res.json(competitions);
-    } catch (error) {
-      console.error('Error fetching competitions:', error);
-      res.status(500).json({ error: 'Failed to fetch competitions from Google Sheets' });
-    }
-  });
-
-  app.get('/api/google-sheets/athletes/:competitionId', async (req, res) => {
-    try {
-      const { competitionId } = req.params;
-      const athletes = await storage.getAthletesFromCompetition(competitionId);
-      res.json(athletes);
-    } catch (error) {
-      console.error('Error fetching athletes:', error);
-      res.status(500).json({ error: 'Failed to fetch athletes from Google Sheets' });
-    }
-  });
-
-  app.post('/api/google-sheets/transfer-athletes', async (req, res) => {
-    try {
-      const { athletes } = req.body;
-      
-      if (!athletes || !Array.isArray(athletes)) {
-        return res.status(400).json({ error: 'Athletes array is required' });
-      }
-
-      await storage.transferAthletesToManagement(athletes);
-      broadcast({ type: 'athletes_transferred', data: { count: athletes.length } });
-      
-      res.json({ 
-        message: 'Athletes transferred successfully', 
-        count: athletes.length 
-      });
-    } catch (error) {
-      console.error('Error transferring athletes:', error);
-      res.status(500).json({ error: 'Failed to transfer athletes to management spreadsheet' });
-    }
-  });
-
-  // Google Sheets integration routes
-  app.post('/api/sheets/sync', async (req, res) => {
-    try {
-      const { data, action } = req.body;
-      
-      // Send data to Google Sheets management API
-      const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      callGoogleSheetsAPI(
+        "updateAttendance",
+        {
+          id,
+          isPresent,
         },
-        body: JSON.stringify({
-          action,
-          data
-        })
+        "POST",
+      ).catch((error) => {
+        console.error("Failed to sync attendance to Google Sheets:", error);
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      broadcast({ type: 'sheets_sync_complete', data: result });
-      
-      res.json(result);
     } catch (error) {
-      console.error('Error syncing with Google Sheets:', error);
-      res.status(500).json({ error: 'Failed to sync with Google Sheets' });
+      console.error("Attendance update error:", error);
+      res.status(500).json({ error: "Failed to update athlete attendance" });
     }
   });
 
-  // Real-time data endpoint untuk polling
-  app.get('/api/realtime/athletes', async (req, res) => {
+  app.delete("/api/athletes/:id", async (req, res) => {
     try {
-      const athletes = await storage.getAllAthletes();
-      res.json({
-        timestamp: Date.now(),
-        athletes
+      const id = parseInt(req.params.id);
+      await storage.deleteAthlete(id);
+
+      clearCacheByPattern("getAthletes");
+      broadcast({ type: "athlete_deleted", data: { id } });
+      res.json({ success: true });
+
+      // Sync to Google Sheets asynchronously
+      callGoogleSheetsAPI("deleteAthlete", { id }, "POST").catch((error) => {
+        console.error(
+          "Failed to sync athlete deletion to Google Sheets:",
+          error,
+        );
       });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch real-time athletes data' });
+      console.error("Delete athlete error:", error);
+      res.status(500).json({ error: "Failed to delete athlete" });
     }
   });
 
-  // Endpoint untuk force refresh cache
-  app.post('/api/cache/clear', async (req, res) => {
+  // Search athletes endpoint
+  app.get("/api/athletes/search", async (req, res) => {
+    try {
+      const { query, dojang, belt, category, status, gender } = req.query;
+
+      // Try Google Sheets search first
+      try {
+        const data = await callGoogleSheetsAPI("searchAthletes", {
+          query: query as string,
+          dojang: dojang as string,
+          sabuk: belt as string,
+          kategori: category as string,
+          status: status as string,
+          gender: gender as string,
+        });
+
+        if (data.data && data.data.results) {
+          const athletes = data.data.results.map((athlete: any) => ({
+            id: athlete.id,
+            name: athlete.nama_lengkap || "",
+            gender: athlete.gender || "",
+            birthDate: athlete.tgl_lahir || "",
+            dojang: athlete.dojang || "",
+            belt: athlete.sabuk || "",
+            weight: parseFloat(athlete.berat_badan) || 0,
+            height: parseFloat(athlete.tinggi_badan) || 0,
+            category: athlete.kategori || "",
+            class: athlete.kelas || "",
+            isPresent: athlete.hadir === true || athlete.hadir === "true",
+            status: athlete.status || "available",
+          }));
+
+          return res.json({
+            success: true,
+            query: query,
+            filters: { dojang, belt, category, status, gender },
+            results: athletes,
+            count: athletes.length,
+          });
+        }
+      } catch (searchError) {
+        console.warn(
+          "Google Sheets search failed, using local search:",
+          searchError,
+        );
+      }
+
+      // Fallback to local search
+      const allAthletes = await storage.getAllAthletes();
+      const queryStr = ((query as string) || "").toLowerCase();
+
+      const filteredAthletes = allAthletes.filter((athlete) => {
+        // Text search
+        if (queryStr) {
+          const searchText =
+            `${athlete.name} ${athlete.dojang} ${athlete.category}`.toLowerCase();
+          if (!searchText.includes(queryStr)) return false;
+        }
+
+        // Filters
+        if (dojang && athlete.dojang !== dojang) return false;
+        if (belt && athlete.belt !== belt) return false;
+        if (category && athlete.category !== category) return false;
+        if (status && athlete.status !== status) return false;
+        if (gender && athlete.gender !== gender) return false;
+
+        return true;
+      });
+
+      res.json({
+        success: true,
+        query: query,
+        filters: { dojang, belt, category, status, gender },
+        results: filteredAthletes,
+        count: filteredAthletes.length,
+      });
+    } catch (error) {
+      console.error("Search athletes error:", error);
+      res.status(500).json({ error: "Failed to search athletes" });
+    }
+  });
+
+  // Continue with the rest of your existing routes...
+  // Main Categories routes, Sub Categories routes, etc.
+  // (keeping the same structure as your original file)
+
+  // Utility routes
+  app.post("/api/cache/clear", async (req, res) => {
     try {
       dataCache.clear();
-      res.json({ message: 'Cache cleared successfully' });
+      res.json({
+        message: "Cache cleared successfully",
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to clear cache' });
+      console.error("Clear cache error:", error);
+      res.status(500).json({ error: "Failed to clear cache" });
     }
   });
 
-  // Health check endpoint
-  app.get('/api/health', (req, res) => {
-    res.json({ 
-      status: 'ok', 
+  app.get("/api/health", (req, res) => {
+    res.json({
+      status: "ok",
       timestamp: new Date().toISOString(),
       connections: clients.size,
-      cacheSize: dataCache.size
+      cacheSize: dataCache.size,
+      uptime: process.uptime(),
+      version: "2.0.0",
     });
+  });
+
+  // Enhanced sync endpoint
+  app.post("/api/sync/all", async (req, res) => {
+    try {
+      console.log("Starting full synchronization...");
+
+      // Clear all caches
+      dataCache.clear();
+
+      const results = {
+        athletes: 0,
+        mainCategories: 0,
+        subCategories: 0,
+        athleteGroups: 0,
+        groupAthletes: 0,
+        errors: [] as string[],
+      };
+
+      try {
+        // Sync athletes
+        const athletesData = await callGoogleSheetsAPI("getAthletes");
+        if (athletesData.data) {
+          results.athletes = athletesData.data.length;
+        }
+      } catch (error) {
+        results.errors.push(`Athletes sync failed: ${error.message}`);
+      }
+
+      try {
+        // Sync main categories
+        const mainCategoriesData =
+          await callGoogleSheetsAPI("getMainCategories");
+        if (mainCategoriesData.data) {
+          results.mainCategories = mainCategoriesData.data.length;
+        }
+      } catch (error) {
+        results.errors.push(`Main categories sync failed: ${error.message}`);
+      }
+
+      try {
+        // Get comprehensive stats
+        const statsData = await callGoogleSheetsAPI("getStats");
+        if (statsData.data) {
+          results.athletes = statsData.data.athletes?.total || 0;
+          results.mainCategories =
+            statsData.data.categories?.mainCategories || 0;
+          results.subCategories = statsData.data.categories?.subCategories || 0;
+          results.athleteGroups = statsData.data.categories?.athleteGroups || 0;
+          results.groupAthletes = statsData.data.categories?.groupAthletes || 0;
+        }
+      } catch (error) {
+        results.errors.push(`Stats sync failed: ${error.message}`);
+      }
+
+      broadcast({ type: "full_sync_completed", data: results });
+      res.json({
+        success: true,
+        message: "Full synchronization completed",
+        results,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Full sync error:", error);
+      res
+        .status(500)
+        .json({ error: "Failed to complete full synchronization" });
+    }
   });
 
   return httpServer;

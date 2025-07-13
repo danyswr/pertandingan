@@ -363,6 +363,61 @@ export default function Tournament() {
     },
   });
 
+  // Tournament bracket logic: winners stay, losers drop to queue, queue moves up
+  const handleWin = async (corner: 'red' | 'blue', groupId: number, winnerId: number, loserId?: number) => {
+    try {
+      // 1. Mark winner with medal (winner stays in their corner)
+      await apiRequest(`/api/tournament/athlete-groups/${groupId}/athletes/${winnerId}/medal`, 'PATCH', { hasMedal: true });
+      
+      if (loserId) {
+        // 2. Move loser to back of queue
+        const currentGroupAthletes = groupAthletes.filter(ga => ga.athleteId && ga.position === 'queue' && !ga.isEliminated);
+        const nextQueueOrder = Math.max(0, ...currentGroupAthletes.map(ga => ga.queueOrder || 0)) + 1;
+        
+        await apiRequest(`/api/tournament/athlete-groups/${groupId}/athletes/${loserId}/position`, 'PATCH', { 
+          position: 'queue',
+          queueOrder: nextQueueOrder
+        });
+
+        // 3. Move first athlete in queue up to replace the loser
+        const firstInQueue = currentGroupAthletes
+          .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0))[0];
+          
+        if (firstInQueue) {
+          const oppositeCorner = corner === 'red' ? 'blue' : 'red';
+          await apiRequest(`/api/tournament/athlete-groups/${groupId}/athletes/${firstInQueue.athleteId}/position`, 'PATCH', { 
+            position: oppositeCorner,
+            queueOrder: 0
+          });
+          
+          // 4. Reorder remaining queue
+          const remainingQueue = currentGroupAthletes
+            .filter(ga => ga.athleteId !== firstInQueue.athleteId)
+            .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0));
+            
+          for (let i = 0; i < remainingQueue.length; i++) {
+            await apiRequest(`/api/tournament/athlete-groups/${groupId}/athletes/${remainingQueue[i].athleteId}/position`, 'PATCH', { 
+              position: 'queue',
+              queueOrder: i + 1
+            });
+          }
+        }
+      }
+
+      toast({ 
+        title: "Pemenang ditetapkan!", 
+        description: `Atlet ${corner === 'red' ? 'sudut merah' : 'sudut biru'} menang! ${loserId ? 'Sistem turnamen diperbarui.' : ''}` 
+      });
+      
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/tournament/athlete-groups', groupId, 'athletes'] });
+      
+    } catch (error) {
+      console.error('Tournament logic error:', error);
+      toast({ title: "Error", description: "Gagal memproses kemenangan.", variant: "destructive" });
+    }
+  };
+
   const deleteAthleteGroupMutation = useMutation({
     mutationFn: api.deleteAthleteGroup,
     onSuccess: () => {
@@ -1764,10 +1819,7 @@ export default function Tournament() {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  declareWinnerMutation.mutate({ 
-                                    athleteId: groupRedCorner.athleteId, 
-                                    groupId: group.id 
-                                  });
+                                  handleWin('red', group.id, groupRedCorner.athleteId, groupBlueCorner?.athleteId);
                                 }}
                                 className="bg-red-600 hover:bg-red-700"
                                 disabled={declareWinnerMutation.isPending}
@@ -1854,10 +1906,7 @@ export default function Tournament() {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  declareWinnerMutation.mutate({ 
-                                    athleteId: groupBlueCorner.athleteId, 
-                                    groupId: group.id 
-                                  });
+                                  handleWin('blue', group.id, groupBlueCorner.athleteId, groupRedCorner?.athleteId);
                                 }}
                                 className="bg-blue-600 hover:bg-blue-700"
                                 disabled={declareWinnerMutation.isPending}
@@ -1922,67 +1971,75 @@ export default function Tournament() {
                     </div>
                     
                     {/* Queue Section - Below the red and blue corners */}
-                    {groupAthletes.filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated).length > 0 && (
+                    {groupAthletes.filter(ga => ga.athleteId && ga.position === 'queue' && !ga.isEliminated).length > 0 && (
                       <Card className="border-2 border-gray-200 bg-gray-50">
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2 text-gray-700">
                             <Users className="h-5 w-5" />
-                            Antrian ({groupAthletes.filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated).length})
+                            Antrian ({groupAthletes.filter(ga => ga.athleteId && ga.position === 'queue' && !ga.isEliminated).length})
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Vertical queue layout - athletes lined up from top to bottom */}
+                          <div className="space-y-3">
                             {groupAthletes
-                              .filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated)
+                              .filter(ga => ga.athleteId && ga.position === 'queue' && !ga.isEliminated)
                               .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0))
-                              .map((queueAthlete) => {
+                              .map((queueAthlete, index) => {
                                 const athlete = allAthletes.find(a => a.id === queueAthlete.athleteId);
+                                if (!athlete) return null;
+                                
                                 return (
-                                  <Card key={queueAthlete.id} className="p-4 bg-white border border-gray-200">
-                                    <div className="space-y-2">
-                                      <div className="flex items-center justify-between">
+                                  <Card key={queueAthlete.id} className="p-3 bg-white border border-gray-200 hover:shadow-md transition-shadow">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-700">
+                                          {index + 1}
+                                        </div>
                                         <div>
-                                          <h4 className="font-semibold">{athlete?.name}</h4>
+                                          <h4 className="font-semibold text-gray-900">{athlete.name}</h4>
                                           <p className="text-sm text-gray-600">
-                                            {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
+                                            {athlete.dojang} • {athlete.belt} • {athlete.weight}kg
                                           </p>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                          <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              removeAthleteMutation.mutate({ 
-                                                groupId: group.id, 
-                                                athleteId: queueAthlete.athleteId 
-                                              });
-                                            }}
-                                            className="h-6 w-6 p-0"
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                        </div>
                                       </div>
-                                      <div className="flex justify-center">
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">
+                                          Antrian #{index + 1}
+                                        </Badge>
                                         <Button
                                           size="sm"
-                                          variant={queueAthlete.hasMedal ? "default" : "outline"}
+                                          variant="outline"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            updateMedalMutation.mutate({ 
+                                            removeAthleteMutation.mutate({ 
                                               groupId: group.id, 
-                                              athleteId: queueAthlete.athleteId,
-                                              hasMedal: !queueAthlete.hasMedal
+                                              athleteId: queueAthlete.athleteId 
                                             });
                                           }}
-                                          className={queueAthlete.hasMedal ? "bg-yellow-500 hover:bg-yellow-600" : ""}
+                                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                                         >
-                                          <Trophy className="h-4 w-4 mr-1" />
-                                          {queueAthlete.hasMedal ? "Sudah Medali" : "Belum Medali"}
+                                          <X className="h-3 w-3" />
                                         </Button>
                                       </div>
+                                    </div>
+                                    <div className="flex justify-center mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant={queueAthlete.hasMedal ? "default" : "outline"}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateMedalMutation.mutate({ 
+                                            groupId: group.id, 
+                                            athleteId: queueAthlete.athleteId,
+                                            hasMedal: !queueAthlete.hasMedal
+                                          });
+                                        }}
+                                        className={queueAthlete.hasMedal ? "bg-yellow-500 hover:bg-yellow-600" : ""}
+                                      >
+                                        <Trophy className="h-4 w-4 mr-1" />
+                                        {queueAthlete.hasMedal ? "Sudah Medali" : "Belum Medali"}
+                                      </Button>
                                     </div>
                                   </Card>
                                 );

@@ -92,13 +92,14 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
-### 2025-07-13 - Google Sheets Sync & Performance Fixes (COMPLETED)
-- **Edit Dialog Fix**: Fixed edit group dialog not opening - removed duplicate setShowEditAthleteGroup call causing UI blocking
-- **Athlete Sync to Groups**: Fixed athletes not appearing in match interface by implementing sync from daftar_kelompok sheet
-- **Data Loading Enhancement**: System now reads athletes from Google Sheets when loading group athletes page
-- **Performance Optimization**: Improved delete operation speed by processing in background
-- **Name-based Matching**: Enhanced athlete matching using names instead of IDs for better Google Sheets compatibility
-- **Real-time Data Sync**: Athletes from spreadsheet now properly appear in red/blue corner interface
+### 2025-07-13 - Tournament Bracket Logic & Queue Management (COMPLETED)
+- **Tournament Bracket Logic**: Implemented complete tournament system where winners stay in position, losers drop to queue
+- **Automatic Queue Management**: Queue athletes automatically move up to fill empty corners when someone loses
+- **Vertical Queue Layout**: Changed queue display from horizontal grid to vertical stack for better visual flow
+- **Correct Queue Filtering**: Fixed queue showing wrong athletes - now displays only athletes from the specific group
+- **Enhanced Position Updates**: Added position update API endpoints with Google Sheets sync
+- **Cascading Delete Logic**: When athlete groups are deleted, all associated athletes are automatically removed
+- **Real-time Tournament Updates**: Live updates for match results, position changes, and queue reordering
 
 ### 2025-07-13 - Migration from Replit Agent & Layout Improvement (COMPLETED)
 - **Migration Completed**: Successfully migrated the complete Taekwondo Tournament Management System from Replit Agent to standard Replit environment

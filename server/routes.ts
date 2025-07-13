@@ -1028,11 +1028,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(groupAthlete);
       
       // Sync to Google Sheets asynchronously
+      console.log('About to sync athlete to Google Sheets for groupAthlete:', groupAthlete);
       const athlete = await storage.getAthleteById(groupAthlete.athleteId);
+      console.log('Found athlete for sync:', athlete);
       if (athlete) {
+        console.log('Triggering sync to Google Sheets...');
         syncAthleteToGoogleSheets(groupAthlete, athlete).catch(error => {
           console.error('Failed to sync athlete to Google Sheets:', error);
         });
+      } else {
+        console.log('No athlete found with ID:', groupAthlete.athleteId);
       }
     } catch (error) {
       if (error instanceof z.ZodError) {

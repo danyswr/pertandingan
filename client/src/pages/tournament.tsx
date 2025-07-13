@@ -1686,152 +1686,206 @@ export default function Tournament() {
                 </CardHeader>
                 <CardContent className="p-6">
                   {/* Match Interface for this specific group */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Red Corner */}
-                    <Card 
-                      className={`border-2 transition-all cursor-pointer ${
-                        selectedCorner === 'red' && selectedAthleteGroup?.id === group.id
-                          ? 'border-red-500 bg-red-50 shadow-lg' 
-                          : groupRedCorner 
-                            ? 'border-red-200 bg-red-50' 
-                            : 'border-red-200 bg-red-50 hover:border-red-300'
-                      }`}
-                      onClick={() => {
-                        if (!groupRedCorner) {
-                          setSelectedAthleteGroup(group);
-                          setSelectedCorner('red');
-                        }
-                      }}
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-red-600 flex items-center justify-between">
-                          <span>Sudut Merah</span>
-                          {groupRedCorner && (
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                declareWinnerMutation.mutate({ 
-                                  athleteId: groupRedCorner.athleteId, 
-                                  groupId: group.id 
-                                });
-                              }}
-                              className="bg-red-600 hover:bg-red-700"
-                              disabled={declareWinnerMutation.isPending}
-                            >
-                              Menang
-                            </Button>
-                          )}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {groupRedCorner ? (
-                          <div className="space-y-2">
-                            <h3 className="font-semibold text-lg">
-                              {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.name}
-                            </h3>
-                            <div className="space-y-1 text-sm text-gray-600">
-                              <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.dojang}</p>
-                              <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.belt}</p>
-                              <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.weight} kg</p>
+                  <div className="space-y-6">
+                    {/* Red and Blue Corners on top */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Red Corner */}
+                      <Card 
+                        className={`border-2 transition-all cursor-pointer ${
+                          selectedCorner === 'red' && selectedAthleteGroup?.id === group.id
+                            ? 'border-red-500 bg-red-50 shadow-lg' 
+                            : groupRedCorner 
+                              ? 'border-red-200 bg-red-50' 
+                              : 'border-red-200 bg-red-50 hover:border-red-300'
+                        }`}
+                        onClick={() => {
+                          if (!groupRedCorner) {
+                            setSelectedAthleteGroup(group);
+                            setSelectedCorner('red');
+                          }
+                        }}
+                      >
+                        <CardHeader>
+                          <CardTitle className="text-red-600 flex items-center justify-between">
+                            <span>Sudut Merah</span>
+                            {groupRedCorner && (
+                              <Button
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  declareWinnerMutation.mutate({ 
+                                    athleteId: groupRedCorner.athleteId, 
+                                    groupId: group.id 
+                                  });
+                                }}
+                                className="bg-red-600 hover:bg-red-700"
+                                disabled={declareWinnerMutation.isPending}
+                              >
+                                Menang
+                              </Button>
+                            )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {groupRedCorner ? (
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-lg">
+                                {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.name}
+                              </h3>
+                              <div className="space-y-1 text-sm text-gray-600">
+                                <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.dojang}</p>
+                                <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.belt}</p>
+                                <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.weight} kg</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeAthleteMutation.mutate({ 
+                                    groupId: group.id, 
+                                    athleteId: groupRedCorner.athleteId 
+                                  });
+                                }}
+                                className="mt-2"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Hapus
+                              </Button>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeAthleteMutation.mutate({ 
-                                  groupId: group.id, 
-                                  athleteId: groupRedCorner.athleteId 
-                                });
-                              }}
-                              className="mt-2"
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Hapus
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8">
-                            <Plus className="h-12 w-12 text-red-400 mx-auto mb-2" />
-                            <p className="text-red-600 font-medium">Klik untuk menambah atlet</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                          ) : (
+                            <div className="text-center py-8">
+                              <Plus className="h-12 w-12 text-red-400 mx-auto mb-2" />
+                              <p className="text-red-600 font-medium">Klik untuk menambah atlet</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
 
-                    {/* Blue Corner */}
-                    <Card 
-                      className={`border-2 transition-all cursor-pointer ${
-                        selectedCorner === 'blue' && selectedAthleteGroup?.id === group.id
-                          ? 'border-blue-500 bg-blue-50 shadow-lg' 
-                          : groupBlueCorner 
-                            ? 'border-blue-200 bg-blue-50' 
-                            : 'border-blue-200 bg-blue-50 hover:border-blue-300'
-                      }`}
-                      onClick={() => {
-                        if (!groupBlueCorner) {
-                          setSelectedAthleteGroup(group);
-                          setSelectedCorner('blue');
-                        }
-                      }}
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-blue-600 flex items-center justify-between">
-                          <span>Sudut Biru</span>
-                          {groupBlueCorner && (
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                declareWinnerMutation.mutate({ 
-                                  athleteId: groupBlueCorner.athleteId, 
-                                  groupId: group.id 
-                                });
-                              }}
-                              className="bg-blue-600 hover:bg-blue-700"
-                              disabled={declareWinnerMutation.isPending}
-                            >
-                              Menang
-                            </Button>
-                          )}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {groupBlueCorner ? (
-                          <div className="space-y-2">
-                            <h3 className="font-semibold text-lg">
-                              {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.name}
-                            </h3>
-                            <div className="space-y-1 text-sm text-gray-600">
-                              <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.dojang}</p>
-                              <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.belt}</p>
-                              <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.weight} kg</p>
+                      {/* Blue Corner */}
+                      <Card 
+                        className={`border-2 transition-all cursor-pointer ${
+                          selectedCorner === 'blue' && selectedAthleteGroup?.id === group.id
+                            ? 'border-blue-500 bg-blue-50 shadow-lg' 
+                            : groupBlueCorner 
+                              ? 'border-blue-200 bg-blue-50' 
+                              : 'border-blue-200 bg-blue-50 hover:border-blue-300'
+                        }`}
+                        onClick={() => {
+                          if (!groupBlueCorner) {
+                            setSelectedAthleteGroup(group);
+                            setSelectedCorner('blue');
+                          }
+                        }}
+                      >
+                        <CardHeader>
+                          <CardTitle className="text-blue-600 flex items-center justify-between">
+                            <span>Sudut Biru</span>
+                            {groupBlueCorner && (
+                              <Button
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  declareWinnerMutation.mutate({ 
+                                    athleteId: groupBlueCorner.athleteId, 
+                                    groupId: group.id 
+                                  });
+                                }}
+                                className="bg-blue-600 hover:bg-blue-700"
+                                disabled={declareWinnerMutation.isPending}
+                              >
+                                Menang
+                              </Button>
+                            )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {groupBlueCorner ? (
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-lg">
+                                {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.name}
+                              </h3>
+                              <div className="space-y-1 text-sm text-gray-600">
+                                <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.dojang}</p>
+                                <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.belt}</p>
+                                <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.weight} kg</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeAthleteMutation.mutate({ 
+                                    groupId: group.id, 
+                                    athleteId: groupBlueCorner.athleteId 
+                                  });
+                                }}
+                                className="mt-2"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Hapus
+                              </Button>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeAthleteMutation.mutate({ 
-                                  groupId: group.id, 
-                                  athleteId: groupBlueCorner.athleteId 
-                                });
-                              }}
-                              className="mt-2"
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Hapus
-                            </Button>
+                          ) : (
+                            <div className="text-center py-8">
+                              <Plus className="h-12 w-12 text-blue-400 mx-auto mb-2" />
+                              <p className="text-blue-600 font-medium">Klik untuk menambah atlet</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    {/* Queue Section - Below the red and blue corners */}
+                    {groupAthletes.filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated).length > 0 && (
+                      <Card className="border-2 border-gray-200 bg-gray-50">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-gray-700">
+                            <Users className="h-5 w-5" />
+                            Antrian ({groupAthletes.filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated).length})
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {groupAthletes
+                              .filter(ga => ga.groupId === group.id && ga.position === 'queue' && !ga.isEliminated)
+                              .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0))
+                              .map((queueAthlete) => {
+                                const athlete = allAthletes.find(a => a.id === queueAthlete.athleteId);
+                                return (
+                                  <Card key={queueAthlete.id} className="p-4 bg-white border border-gray-200">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <h4 className="font-semibold">{athlete?.name}</h4>
+                                        <p className="text-sm text-gray-600">
+                                          {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeAthleteMutation.mutate({ 
+                                              groupId: group.id, 
+                                              athleteId: queueAthlete.athleteId 
+                                            });
+                                          }}
+                                          className="h-6 w-6 p-0"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </Card>
+                                );
+                              })}
                           </div>
-                        ) : (
-                          <div className="text-center py-8">
-                            <Plus className="h-12 w-12 text-blue-400 mx-auto mb-2" />
-                            <p className="text-blue-600 font-medium">Klik untuk menambah atlet</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1981,37 +2035,7 @@ export default function Tournament() {
           </DialogContent>
         </Dialog>
 
-        {/* Queue Section */}
-        {queue.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Antrian Atlet
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {queue.map((queueAthlete) => {
-                  const athlete = allAthletes.find(a => a.id === queueAthlete.athleteId);
-                  return (
-                    <Card key={queueAthlete.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold">{athlete?.name}</h4>
-                          <p className="text-sm text-gray-600">
-                            {athlete?.dojang} • {athlete?.belt} • {athlete?.weight}kg
-                          </p>
-                        </div>
-                        <Badge variant="outline">#{queueAthlete.queueOrder}</Badge>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* Eliminated Section */}
         {eliminated.length > 0 && (

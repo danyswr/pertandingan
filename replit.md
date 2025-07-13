@@ -92,6 +92,13 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-13 - Migration from Replit Agent & Layout Improvement (COMPLETED)
+- **Migration Completed**: Successfully migrated the complete Taekwondo Tournament Management System from Replit Agent to standard Replit environment
+- **Database Setup**: Created PostgreSQL database with proper schema migration and environment configuration
+- **Layout Improvement**: Updated athlete group card layout with red and blue corners positioned on top and queue section below
+- **WebSocket Functionality**: Real-time communication working properly with automatic reconnection
+- **All Systems Operational**: API endpoints, frontend, database, and Google Sheets integration all functioning correctly
+
 ### 2025-07-12 - Complete CRUD Operations Fix for Tournament Management (COMPLETED)
 - **Google Apps Script Fix**: Fixed missing `updateSubCategory` and `deleteSubCategory` actions causing edit/delete operations to show success toast but not actually update data
   - Added complete CRUD operations for Sub Categories: create, read, update, delete

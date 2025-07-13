@@ -65,7 +65,7 @@ export default function Tournament() {
   const [ageRange, setAgeRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [weightRange, setWeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
   const [heightRange, setHeightRange] = useState<{min: string; max: string}>({min: '', max: ''});
-  const [contextMenu, setContextMenu] = useState<{athlete: Athlete; x: number; y: number; currentPosition: 'red' | 'blue' | 'queue'} | null>(null);
+  const [contextMenu, setContextMenu] = useState<{athlete: Athlete; x: number; y: number; currentPosition: 'red' | 'blue' | 'queue'; groupId?: number} | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   
   const queryClient = useQueryClient();
@@ -204,21 +204,42 @@ export default function Tournament() {
 
   // Switch athlete position
   const switchAthletePosition = (athlete: Athlete, newPosition: 'red' | 'blue' | 'queue') => {
-    const currentPosition = selectedRedCorner?.id === athlete.id ? 'red' :
-                           selectedBlueCorner?.id === athlete.id ? 'blue' : 'queue';
+    if (!contextMenu?.groupId) return;
     
-    // Remove from current position
-    if (currentPosition === 'red') setSelectedRedCorner(null);
-    else if (currentPosition === 'blue') setSelectedBlueCorner(null);
-    else if (currentPosition === 'queue') removeAthleteFromQueue(athlete.id);
-    
-    // Add to new position
-    if (newPosition === 'red' && !selectedRedCorner) {
-      setSelectedRedCorner(athlete);
-    } else if (newPosition === 'blue' && !selectedBlueCorner) {
-      setSelectedBlueCorner(athlete);
-    } else if (newPosition === 'queue' && !selectedQueue.find(qa => qa.id === athlete.id)) {
-      setSelectedQueue(prev => [...prev, athlete]);
+    // For tournament mode, call the API to update position
+    if (viewMode === 'group-athletes') {
+      // Calculate queue order for queue position
+      let queueOrder = 0;
+      if (newPosition === 'queue') {
+        const currentQueueAthletes = groupAthletes.filter(ga => ga.position === 'queue' && !ga.isEliminated);
+        queueOrder = currentQueueAthletes.length > 0 ? 
+          Math.max(...currentQueueAthletes.map(ga => ga.queueOrder || 0)) + 1 : 1;
+      }
+      
+      updatePositionMutation.mutate({
+        groupId: contextMenu.groupId,
+        athleteId: athlete.id,
+        position: newPosition,
+        queueOrder: queueOrder
+      });
+    } else {
+      // For creating new groups, update local state
+      const currentPosition = selectedRedCorner?.id === athlete.id ? 'red' :
+                             selectedBlueCorner?.id === athlete.id ? 'blue' : 'queue';
+      
+      // Remove from current position
+      if (currentPosition === 'red') setSelectedRedCorner(null);
+      else if (currentPosition === 'blue') setSelectedBlueCorner(null);
+      else if (currentPosition === 'queue') removeAthleteFromQueue(athlete.id);
+      
+      // Add to new position
+      if (newPosition === 'red' && !selectedRedCorner) {
+        setSelectedRedCorner(athlete);
+      } else if (newPosition === 'blue' && !selectedBlueCorner) {
+        setSelectedBlueCorner(athlete);
+      } else if (newPosition === 'queue' && !selectedQueue.find(qa => qa.id === athlete.id)) {
+        setSelectedQueue(prev => [...prev, athlete]);
+      }
     }
     
     setContextMenu(null);
@@ -452,6 +473,18 @@ export default function Tournament() {
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal memperbarui status medali", variant: "destructive" });
+    },
+  });
+
+  const updatePositionMutation = useMutation({
+    mutationFn: ({ groupId, athleteId, position, queueOrder }: { groupId: number; athleteId: number; position: string; queueOrder?: number }) =>
+      api.updateAthletePosition(groupId, athleteId, position, queueOrder),
+    onSuccess: () => {
+      toast({ title: "Berhasil", description: "Posisi atlet berhasil diperbarui" });
+      queryClient.invalidateQueries({ queryKey: ['group-athletes', selectedAthleteGroup?.id] });
+    },
+    onError: () => {
+      toast({ title: "Gagal", description: "Gagal memperbarui posisi atlet", variant: "destructive" });
     },
   });
 
@@ -1831,7 +1864,22 @@ export default function Tournament() {
                         </CardHeader>
                         <CardContent>
                           {groupRedCorner ? (
-                            <div className="space-y-2">
+                            <div 
+                              className="space-y-2"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                const athlete = allAthletes.find(a => a.id === groupRedCorner.athleteId);
+                                if (athlete) {
+                                  setContextMenu({
+                                    athlete,
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    currentPosition: 'red',
+                                    groupId: group.id
+                                  });
+                                }
+                              }}
+                            >
                               <h3 className="font-semibold text-lg">
                                 {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.name}
                               </h3>
@@ -1839,6 +1887,7 @@ export default function Tournament() {
                                 <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.dojang}</p>
                                 <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.belt}</p>
                                 <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupRedCorner.athleteId)?.weight} kg</p>
+                                <p className="text-xs text-gray-400 italic">Klik kanan untuk pindah posisi</p>
                               </div>
                               <div className="flex gap-2 mt-2">
                                 <Button
@@ -1918,7 +1967,22 @@ export default function Tournament() {
                         </CardHeader>
                         <CardContent>
                           {groupBlueCorner ? (
-                            <div className="space-y-2">
+                            <div 
+                              className="space-y-2"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                const athlete = allAthletes.find(a => a.id === groupBlueCorner.athleteId);
+                                if (athlete) {
+                                  setContextMenu({
+                                    athlete,
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    currentPosition: 'blue',
+                                    groupId: group.id
+                                  });
+                                }
+                              }}
+                            >
                               <h3 className="font-semibold text-lg">
                                 {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.name}
                               </h3>
@@ -1926,6 +1990,7 @@ export default function Tournament() {
                                 <p><strong>Dojang:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.dojang}</p>
                                 <p><strong>Sabuk:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.belt}</p>
                                 <p><strong>BB:</strong> {allAthletes.find(a => a.id === groupBlueCorner.athleteId)?.weight} kg</p>
+                                <p className="text-xs text-gray-400 italic">Klik kanan untuk pindah posisi</p>
                               </div>
                               <div className="flex gap-2 mt-2">
                                 <Button
@@ -1990,7 +2055,20 @@ export default function Tournament() {
                                 if (!athlete) return null;
                                 
                                 return (
-                                  <Card key={queueAthlete.id} className="p-3 bg-white border border-gray-200 hover:shadow-md transition-shadow">
+                                  <Card 
+                                    key={queueAthlete.id} 
+                                    className="p-3 bg-white border border-gray-200 hover:shadow-md transition-shadow"
+                                    onContextMenu={(e) => {
+                                      e.preventDefault();
+                                      setContextMenu({
+                                        athlete,
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        currentPosition: 'queue',
+                                        groupId: group.id
+                                      });
+                                    }}
+                                  >
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-700">
@@ -2001,6 +2079,7 @@ export default function Tournament() {
                                           <p className="text-sm text-gray-600">
                                             {athlete.dojang} • {athlete.belt} • {athlete.weight}kg
                                           </p>
+                                          <p className="text-xs text-gray-400 italic">Klik kanan untuk pindah posisi</p>
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
@@ -2256,6 +2335,88 @@ export default function Tournament() {
         {viewMode === 'athlete-groups' && renderAthleteGroups()}
         {viewMode === 'group-athletes' && renderGroupAthletes()}
       </div>
+
+      {/* Context Menu for Tournament Mode */}
+      {contextMenu && viewMode === 'group-athletes' && (
+        <>
+          <div 
+            className="fixed bg-white border shadow-lg rounded-lg py-2 z-50"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onMouseLeave={() => setContextMenu(null)}
+          >
+            <div className="px-3 py-1 text-xs text-gray-500 border-b mb-1">
+              {contextMenu.athlete.name}
+            </div>
+            
+            {/* Move to Red Corner */}
+            {contextMenu.currentPosition !== 'red' && !groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated) && (
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600"
+                onClick={() => switchAthletePosition(contextMenu.athlete, 'red')}
+              >
+                Pindah ke Sudut Merah
+              </button>
+            )}
+            
+            {/* Move to Blue Corner */}
+            {contextMenu.currentPosition !== 'blue' && !groupAthletes.find(ga => ga.position === 'blue' && !ga.isEliminated) && (
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-blue-600"
+                onClick={() => switchAthletePosition(contextMenu.athlete, 'blue')}
+              >
+                Pindah ke Sudut Biru
+              </button>
+            )}
+            
+            {/* Move to Queue */}
+            {contextMenu.currentPosition !== 'queue' && (
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-600"
+                onClick={() => switchAthletePosition(contextMenu.athlete, 'queue')}
+              >
+                Pindah ke Antrian
+              </button>
+            )}
+            
+            {/* Switch Red and Blue (if both corners are occupied) */}
+            {(contextMenu.currentPosition === 'red' || contextMenu.currentPosition === 'blue') && 
+             groupAthletes.filter(ga => (ga.position === 'red' || ga.position === 'blue') && !ga.isEliminated).length === 2 && (
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50 text-purple-600"
+                onClick={() => {
+                  const redAthlete = groupAthletes.find(ga => ga.position === 'red' && !ga.isEliminated);
+                  const blueAthlete = groupAthletes.find(ga => ga.position === 'blue' && !ga.isEliminated);
+                  
+                  if (redAthlete && blueAthlete) {
+                    // Switch positions
+                    updatePositionMutation.mutate({
+                      groupId: contextMenu.groupId!,
+                      athleteId: redAthlete.athleteId,
+                      position: 'blue',
+                      queueOrder: 0
+                    });
+                    updatePositionMutation.mutate({
+                      groupId: contextMenu.groupId!,
+                      athleteId: blueAthlete.athleteId,
+                      position: 'red',
+                      queueOrder: 0
+                    });
+                    setContextMenu(null);
+                  }
+                }}
+              >
+                Tukar Sudut Merah & Biru
+              </button>
+            )}
+          </div>
+          
+          {/* Overlay to close context menu */}
+          <div 
+            className="fixed inset-0 z-40"
+            onClick={() => setContextMenu(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -460,16 +460,44 @@ export class MemStorage implements IStorage {
 
   async addAthleteToGroup(groupAthlete: InsertGroupAthlete): Promise<GroupAthlete> {
     const id = this.currentGroupAthleteId++;
+    
+    // Get current athletes in this group to determine position
+    const existingAthletes = Array.from(this.groupAthletes.values())
+      .filter(ga => ga.groupId === groupAthlete.groupId && !ga.isEliminated);
+    
+    // Auto-assign position if not specified
+    let position = groupAthlete.position;
+    let queueOrder = groupAthlete.queueOrder || 1;
+    
+    if (!position) {
+      const redCorner = existingAthletes.find(ga => ga.position === 'red');
+      const blueCorner = existingAthletes.find(ga => ga.position === 'blue');
+      
+      if (!redCorner) {
+        position = 'red';
+        queueOrder = 0;
+      } else if (!blueCorner) {
+        position = 'blue';
+        queueOrder = 0;
+      } else {
+        position = 'queue';
+        // Find the next queue order
+        const queueAthletes = existingAthletes.filter(ga => ga.position === 'queue');
+        queueOrder = queueAthletes.length > 0 ? 
+          Math.max(...queueAthletes.map(ga => ga.queueOrder || 0)) + 1 : 1;
+      }
+    }
+    
     const newGroupAthlete: GroupAthlete = { 
       ...groupAthlete, 
       id,
       groupId: groupAthlete.groupId || null,
       athleteId: groupAthlete.athleteId || null,
-      position: groupAthlete.position || null,
-      queueOrder: groupAthlete.queueOrder || null,
-      isEliminated: groupAthlete.isEliminated || null,
+      position: position || null,
+      queueOrder: queueOrder || null,
+      isEliminated: groupAthlete.isEliminated || false,
       eliminatedAt: groupAthlete.eliminatedAt || null,
-      hasMedal: groupAthlete.hasMedal || null
+      hasMedal: groupAthlete.hasMedal || false
     };
     this.groupAthletes.set(id, newGroupAthlete);
     

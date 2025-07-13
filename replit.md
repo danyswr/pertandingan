@@ -92,6 +92,14 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-13 - Context Menu & Auto-Position Logic Fix (COMPLETED)
+- **Automatic Athlete Positioning**: Fixed auto-assignment logic so first athlete goes to red corner, second to blue corner, remaining athletes queue automatically
+- **Right-Click Context Menu**: Added comprehensive context menu for switching athlete positions between red corner, blue corner, and queue
+- **Indonesian Position Labels**: Enhanced Google Sheets integration to properly mark queued athletes as "antri" in M/B column (instead of empty)
+- **Dialog Auto-Open Fix**: Resolved issue where edit dialog would automatically appear when navigating to tournament management
+- **Enhanced Position Sync**: Updated syncAthleteToGoogleSheets function to handle Indonesian position labels (merah/biru/antri)
+- **Google Apps Script Enhancement**: Created specialized script for position updates with proper M/B column handling
+
 ### 2025-07-13 - Tournament Bracket Logic & Queue Management (COMPLETED)
 - **Tournament Bracket Logic**: Implemented complete tournament system where winners stay in position, losers drop to queue
 - **Automatic Queue Management**: Queue athletes automatically move up to fill empty corners when someone loses

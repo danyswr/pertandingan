@@ -645,9 +645,22 @@ export default function Tournament() {
   const navigateToGroupAthletes = (athleteGroup: AthleteGroup) => {
     setSelectedAthleteGroup(athleteGroup);
     setViewMode('group-athletes');
+    // Clear any open dialogs when navigating
+    setShowEditAthleteGroup(false);
+    setEditingGroup(null);
+    setContextMenu(null);
   };
 
   const navigateBack = () => {
+    // Clear all dialogs when navigating back
+    setShowEditMainCategory(false);
+    setShowEditSubCategory(false);
+    setShowEditAthleteGroup(false);
+    setEditingCategory(null);
+    setEditingSubCategory(null);
+    setEditingGroup(null);
+    setContextMenu(null);
+    
     switch (viewMode) {
       case 'sub-categories':
         setViewMode('main-categories');

@@ -304,7 +304,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Syncing athlete to Google Sheets daftar_kelompok: ${athlete.name}`);
 
       const position = groupAthlete.position === 'red' ? 'merah' : 
-                      groupAthlete.position === 'blue' ? 'biru' : '';
+                      groupAthlete.position === 'blue' ? 'biru' : 
+                      groupAthlete.position === 'queue' ? 'antri' : '';
 
       const postData = new URLSearchParams({
         action: 'addAthleteToGroup',
@@ -1126,7 +1127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   await storage.addAthleteToGroup({
                     groupId: groupId,
                     athleteId: matchingAthlete.id,
-                    position: position || 'queue',
+                    position: position || '', // Let storage auto-assign position
                     queueOrder: queueOrder,
                     isEliminated: false,
                     hasMedal: hasMedal
@@ -1261,7 +1262,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Sync position update to Google Sheets asynchronously
       const positionMB = position === 'red' ? 'merah' : 
-                        position === 'blue' ? 'biru' : position;
+                        position === 'blue' ? 'biru' : 
+                        position === 'queue' ? 'antri' : position;
       
       syncTournamentToGoogleSheets('updateAthleteInGroup', {
         id: groupAthlete.id.toString(),

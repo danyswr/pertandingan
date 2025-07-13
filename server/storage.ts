@@ -469,7 +469,7 @@ export class MemStorage implements IStorage {
     let position = groupAthlete.position;
     let queueOrder = groupAthlete.queueOrder || 1;
     
-    if (!position) {
+    if (!position || position === '') {
       const redCorner = existingAthletes.find(ga => ga.position === 'red');
       const blueCorner = existingAthletes.find(ga => ga.position === 'blue');
       

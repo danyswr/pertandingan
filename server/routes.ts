@@ -20,7 +20,7 @@ const GOOGLE_SHEETS_CONFIG = {
 
 // Cache untuk mempercepat pengambilan data
 const dataCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_DURATION = 2000; // 2 detik (reduced for quicker updates)
+const CACHE_DURATION = 500; // 0.5 detik untuk response yang lebih cepat
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -79,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 detik timeout untuk response lebih cepat
       
       console.log(`Making request to: ${urlWithParams.toString()}`);
       
@@ -419,13 +419,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // First try to get from Google Sheets atlets sheet
       try {
         const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
-          action: 'getAllData'
+          action: 'getAthletes'
         });
         
-        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 1) {
-          // Parse the sheet data (skip header row)
-          const athletes = data.data.slice(1).map((row: any[], index: number) => {
-            const athleteId = index + 1;
+        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 0) {
+          // Parse the athlete data directly from Google Sheets response
+          const athletes = data.data.map((athlete: any) => {
+            const athleteId = athlete.id;
             
             // If athlete has been modified locally, use local data
             if (localAthleteMap.has(athleteId)) {
@@ -434,31 +434,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return localAthlete;
             }
             
-            // Ensure we have enough columns for Google Sheets data
-            if (row.length < 13) {
-              while (row.length < 13) {
-                row.push('');
-              }
-            }
-            
             try {
               return {
-                id: athleteId, // Use row index as ID
-                name: row[1] || '', // Nama Lengkap
-                gender: row[2] || '', // Gender
-                birthDate: row[3] || '', // Tanggal Lahir
-                dojang: row[4] || '', // Dojang
-                belt: row[5] || '', // Sabuk
-                weight: parseFloat(row[6]) || 0, // Berat Badan
-                height: parseFloat(row[7]) || 0, // Tinggi Badan
-                category: row[8] || '', // Kategori
-                class: row[9] || '', // Kelas
-                isPresent: row[10] === 'TRUE' || row[10] === true || row[10] === 'true', // Hadir
-                status: row[11] || 'available', // Status
-                createdAt: row[12] ? String(row[12]) : new Date().toISOString() // Waktu Input sebagai string
+                id: athleteId,
+                name: athlete.name || '',
+                gender: athlete.gender || '',
+                birthDate: athlete.birthDate || '',
+                dojang: athlete.dojang || '',
+                belt: athlete.belt || '',
+                weight: parseFloat(athlete.weight) || 0,
+                height: parseFloat(athlete.height) || 0,
+                category: athlete.category || '',
+                class: athlete.class || '',
+                isPresent: athlete.isPresent === 'TRUE' || athlete.isPresent === true || athlete.isPresent === 'true',
+                status: athlete.status || 'available',
+                createdAt: athlete.timestamp || new Date().toISOString()
               };
             } catch (parseError) {
-              console.error('Error parsing athlete row:', row, parseError);
+              console.error('Error parsing athlete data:', athlete, parseError);
               return null;
             }
           }).filter(athlete => athlete !== null && athlete.name && athlete.name.trim() !== '');
@@ -703,6 +696,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(athlete);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update athlete status' });
+    }
+  });
+
+  // DELETE athlete endpoint
+  app.delete('/api/athletes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Delete from local storage
+      await storage.deleteAthlete(id);
+      
+      // Clear cache
+      dataCache.clear();
+      
+      broadcast({ type: 'athlete_deleted', data: { id } });
+      res.json({ success: true });
+      
+      // Sync deletion to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('deleteAthlete', {
+        id: id.toString()
+      }).catch(error => {
+        console.error('Failed to sync athlete deletion to Google Sheets:', error);
+      });
+    } catch (error) {
+      console.error('Delete athlete error:', error);
+      res.status(500).json({ error: 'Failed to delete athlete' });
     }
   });
 

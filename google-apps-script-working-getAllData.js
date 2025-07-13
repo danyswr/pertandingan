@@ -112,12 +112,23 @@ function doGet(e) {
 
     // ============ HANDLE getMainCategories ACTION ============
     if (params.action === 'getMainCategories') {
-      const mainCategorySheet = spreadsheet.getSheetByName('kategori_utama');
+      let mainCategorySheet = spreadsheet.getSheetByName('Kategori_utama');
       
       if (!mainCategorySheet) {
-        return ContentService
-          .createTextOutput(JSON.stringify({success: true, data: []}))
-          .setMimeType(ContentService.MimeType.JSON);
+        // Try alternative sheet names
+        mainCategorySheet = spreadsheet.getSheetByName('kategori_utama');
+      }
+      
+      if (!mainCategorySheet) {
+        console.log('Creating new Kategori_utama sheet');
+        mainCategorySheet = spreadsheet.insertSheet('Kategori_utama');
+        mainCategorySheet.getRange(1, 1, 1, 2).setValues([['id_kategori', 'nama_kategori']]);
+        
+        // Add default data
+        mainCategorySheet.appendRow([1, 'kyorugi']);
+        mainCategorySheet.appendRow([2, 'poomsae']);
+        
+        console.log('Added default categories to Kategori_utama sheet');
       }
       
       const data = mainCategorySheet.getDataRange().getValues();
@@ -314,11 +325,15 @@ function initializeSheets() {
     atletsSheet.getRange(1, 1, 1, 13).setValues([['id_atlet', 'nama_lengkap', 'gender', 'tgl_lahir', 'dojang', 'sabuk', 'berat_badan', 'tinggi_badan', 'kategori', 'kelas', 'hadir', 'status', 'timestamp']]);
   }
   
-  // Initialize kategori_utama sheet
-  let mainCategorySheet = spreadsheet.getSheetByName('kategori_utama');
+  // Initialize Kategori_utama sheet (capital K)
+  let mainCategorySheet = spreadsheet.getSheetByName('Kategori_utama');
   if (!mainCategorySheet) {
-    mainCategorySheet = spreadsheet.insertSheet('kategori_utama');
+    mainCategorySheet = spreadsheet.insertSheet('Kategori_utama');
     mainCategorySheet.getRange(1, 1, 1, 2).setValues([['id_kategori', 'nama_kategori']]);
+    
+    // Add default data
+    mainCategorySheet.appendRow([1, 'kyorugi']);
+    mainCategorySheet.appendRow([2, 'poomsae']);
   }
   
   console.log('All sheets initialized successfully');

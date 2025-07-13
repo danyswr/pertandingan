@@ -817,25 +817,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log('Google Sheets main categories response:', data);
         
-        if (data && data.success && data.data && Array.isArray(data.data)) {
+        if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > 0) {
           console.log(`Loaded ${data.data.length} main categories from Google Sheets`);
+          
+          // Clear existing categories to avoid duplicates
+          await storage.clearAllMainCategories();
           
           // Sync each category to local storage
           for (const categoryData of data.data) {
             if (categoryData.id && categoryData.name) {
-              const existingCategory = await storage.getMainCategoryById(categoryData.id);
-              if (!existingCategory) {
-                await storage.createMainCategory({
-                  id: categoryData.id,
-                  name: categoryData.name
-                });
-              } else {
-                await storage.updateMainCategory(categoryData.id, {
-                  name: categoryData.name
-                });
-              }
+              await storage.createMainCategory({
+                id: categoryData.id,
+                name: categoryData.name
+              });
             }
           }
+          
+          const categories = await storage.getAllMainCategories();
+          console.log(`Returning ${categories.length} main categories:`, categories);
+          return res.json(categories);
         } else {
           console.log('No categories from Google Sheets, creating default categories');
           // Create default categories if none found

@@ -51,6 +51,7 @@ export interface IStorage {
   createMainCategory(category: InsertMainCategory): Promise<MainCategory>;
   updateMainCategory(id: number, category: Partial<InsertMainCategory>): Promise<MainCategory>;
   deleteMainCategory(id: number): Promise<void>;
+  clearAllMainCategories(): Promise<void>;
   
   // Sub Categories (SubKategori)
   getSubCategoriesByMainCategory(mainCategoryId: number): Promise<SubCategory[]>;
@@ -340,6 +341,10 @@ export class MemStorage implements IStorage {
     }
     
     return categories;
+  }
+
+  async clearAllMainCategories(): Promise<void> {
+    this.mainCategories.clear();
   }
 
   async getMainCategoryById(id: number): Promise<MainCategory | undefined> {

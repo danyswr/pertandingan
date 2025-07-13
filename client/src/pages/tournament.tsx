@@ -1470,12 +1470,47 @@ export default function Tournament() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {athleteGroups.map((group) => (
-          <Card key={group.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card key={group.id} className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="h-5 w-5 text-purple-500" />
-                {group.name}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Crown className="h-5 w-5 text-purple-500" />
+                  {group.name}
+                </CardTitle>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedAthleteGroup(group);
+                        setEditingGroup(group);
+                        setShowEditAthleteGroup(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Kelompok
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Apakah Anda yakin ingin menghapus kelompok "${group.name}"?`)) {
+                          deleteAthleteGroupMutation.mutate(group.id);
+                        }
+                      }}
+                      disabled={deleteAthleteGroupMutation.isPending}
+                      className="text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Hapus Kelompok
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 mb-4">

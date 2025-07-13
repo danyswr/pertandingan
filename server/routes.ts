@@ -1101,6 +1101,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // If still no athlete, create a placeholder with the ID for sync purposes
+      if (!athlete) {
+        console.log(`Creating placeholder athlete for ID ${groupAthlete.athleteId} to enable sync`);
+        athlete = {
+          id: groupAthlete.athleteId,
+          name: `Athlete ${groupAthlete.athleteId}`,
+          gender: 'Unknown',
+          birthDate: '2000-01-01',
+          dojang: 'Unknown',
+          belt: 'Unknown',
+          weight: 0,
+          height: 0,
+          category: '',
+          class: '',
+          isPresent: false,
+          status: 'available'
+        };
+      }
+      
       if (athlete) {
         console.log('Triggering sync to Google Sheets...');
         syncAthleteToGoogleSheets(groupAthlete, athlete).catch(error => {

@@ -1020,10 +1020,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Process deletion and sync in background
       try {
+        // First get all athletes in this group
+        const groupAthletes = await storage.getGroupAthletesByGroup(id);
+        console.log(`Found ${groupAthletes.length} athletes in group ${id} to be deleted`);
+        
+        // Delete all athletes from this group first
+        for (const groupAthlete of groupAthletes) {
+          console.log(`Removing athlete ${groupAthlete.athleteId} from group ${id}`);
+          await storage.removeAthleteFromGroup(id, groupAthlete.athleteId);
+        }
+        
+        // Then delete the athlete group itself
         await storage.deleteAthleteGroup(id);
         broadcast({ type: 'athlete_group_deleted', data: { id } });
         
-        // Sync delete to Google Sheets
+        // Sync deletions to Google Sheets
+        // Delete all athletes from this group in daftar_kelompok sheet
+        await syncTournamentToGoogleSheets('deleteAllAthletesFromGroup', {
+          groupId: id.toString()
+        });
+        
+        // Then delete the athlete group from Kelompok_Atlet sheet
         await syncTournamentToGoogleSheets('deleteAthleteGroup', {
           id: id.toString()
         });
@@ -1031,7 +1048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Clear cache to force fresh data on next fetch
         dataCache.clear();
         
-        console.log(`Successfully deleted athlete group ${id} and synced to Google Sheets`);
+        console.log(`Successfully deleted athlete group ${id}, removed ${groupAthletes.length} athletes, and synced to Google Sheets`);
       } catch (error) {
         console.error('Failed to delete athlete group or sync to Google Sheets:', error);
       }

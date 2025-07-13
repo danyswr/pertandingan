@@ -1491,12 +1491,9 @@ export default function Tournament() {
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Use setTimeout to prevent blocking the UI
-                        setTimeout(() => {
-                          setSelectedAthleteGroup(group);
-                          setEditingGroup(group);
-                          setShowEditAthleteGroup(true);
-                        }, 0);
+                        setSelectedAthleteGroup(group);
+                        setEditingGroup(group);
+                        setShowEditAthleteGroup(true);
                       }}
                     >
                       <Edit className="h-4 w-4 mr-2" />

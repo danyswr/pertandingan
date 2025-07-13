@@ -1014,19 +1014,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/tournament/athlete-groups/:id', async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteAthleteGroup(id);
-      broadcast({ type: 'athlete_group_deleted', data: { id } });
+      
+      // Respond immediately for better user experience
       res.json({ success: true });
       
-      // Sync delete to Google Sheets asynchronously
-      syncTournamentToGoogleSheets('deleteAthleteGroup', {
-        id: id.toString()
-      }).catch(error => {
-        console.error('Failed to sync athlete group deletion to Google Sheets:', error);
-      });
-      
-      // Clear cache to force fresh data on next fetch
-      dataCache.clear();
+      // Process deletion and sync in background
+      try {
+        await storage.deleteAthleteGroup(id);
+        broadcast({ type: 'athlete_group_deleted', data: { id } });
+        
+        // Sync delete to Google Sheets
+        await syncTournamentToGoogleSheets('deleteAthleteGroup', {
+          id: id.toString()
+        });
+        
+        // Clear cache to force fresh data on next fetch
+        dataCache.clear();
+        
+        console.log(`Successfully deleted athlete group ${id} and synced to Google Sheets`);
+      } catch (error) {
+        console.error('Failed to delete athlete group or sync to Google Sheets:', error);
+      }
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete athlete group' });
     }
@@ -1056,8 +1064,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Sync to Google Sheets asynchronously
       console.log('About to sync athlete to Google Sheets for groupAthlete:', groupAthlete);
-      const athlete = await storage.getAthleteById(groupAthlete.athleteId);
+      let athlete = await storage.getAthleteById(groupAthlete.athleteId);
       console.log('Found athlete for sync:', athlete);
+      
+      if (!athlete) {
+        // Try to sync from Google Sheets to get the athlete data
+        console.log(`Athlete ${groupAthlete.athleteId} not found in local storage, syncing from Google Sheets...`);
+        try {
+          const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+            action: 'getAllData'
+          });
+          
+          if (data && data.success && data.data && Array.isArray(data.data) && data.data.length > groupAthlete.athleteId) {
+            const athleteRow = data.data[groupAthlete.athleteId];
+            if (athleteRow && athleteRow.length > 0) {
+              const athleteData = {
+                name: athleteRow[1] || '',
+                gender: athleteRow[2] || '',
+                birthDate: athleteRow[3] || '',
+                dojang: athleteRow[4] || '',
+                belt: athleteRow[5] || '',
+                weight: parseFloat(athleteRow[6]) || 0,
+                height: parseFloat(athleteRow[7]) || 0,
+                category: athleteRow[8] || '',
+                class: athleteRow[9] || '',
+                isPresent: athleteRow[10] === 'TRUE' || athleteRow[10] === true || athleteRow[10] === 'true',
+                status: athleteRow[11] || 'available'
+              };
+              
+              athlete = await storage.createAthlete(athleteData);
+              console.log('Created athlete from Google Sheets data:', athlete);
+            }
+          }
+        } catch (syncError) {
+          console.error('Failed to sync athlete from Google Sheets:', syncError);
+        }
+      }
+      
       if (athlete) {
         console.log('Triggering sync to Google Sheets...');
         syncAthleteToGoogleSheets(groupAthlete, athlete).catch(error => {

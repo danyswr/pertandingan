@@ -92,6 +92,13 @@ The system uses a relational database design with the following core entities:
 
 ## Recent Changes
 
+### 2025-07-13 - Google Sheets Sync & Performance Fixes (IN PROGRESS)
+- **Delete/Edit Sync Issue**: Fixed Google Sheets synchronization for athlete group edit and delete operations
+- **Performance Optimization**: Improved delete operation speed by processing in background
+- **Athlete Data Sync**: Enhanced athlete-to-group sync by auto-creating missing athletes from Google Sheets
+- **UI Responsiveness**: Fixed edit dialog performance issues and removed unnecessary delays
+- **Cache Management**: Added proper cache clearing to ensure fresh data after operations
+
 ### 2025-07-13 - Migration from Replit Agent & Layout Improvement (COMPLETED)
 - **Migration Completed**: Successfully migrated the complete Taekwondo Tournament Management System from Replit Agent to standard Replit environment
 - **Database Setup**: Created PostgreSQL database with proper schema migration and environment configuration

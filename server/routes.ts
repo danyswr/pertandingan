@@ -985,6 +985,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const athleteGroup = await storage.updateAthleteGroup(id, validatedData);
       broadcast({ type: 'athlete_group_updated', data: athleteGroup });
       res.json(athleteGroup);
+      
+      // Sync update to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('updateAthleteGroup', {
+        id: id.toString(),
+        name: athleteGroup.name,
+        description: athleteGroup.description || '',
+        matchNumber: athleteGroup.matchNumber?.toString() || '1'
+      }).catch(error => {
+        console.error('Failed to sync athlete group update to Google Sheets:', error);
+      });
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ error: 'Invalid athlete group data', details: error.errors });
@@ -1000,6 +1013,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteAthleteGroup(id);
       broadcast({ type: 'athlete_group_deleted', data: { id } });
       res.json({ success: true });
+      
+      // Sync delete to Google Sheets asynchronously
+      syncTournamentToGoogleSheets('deleteAthleteGroup', {
+        id: id.toString()
+      }).catch(error => {
+        console.error('Failed to sync athlete group deletion to Google Sheets:', error);
+      });
+      
+      // Clear cache to force fresh data on next fetch
+      dataCache.clear();
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete athlete group' });
     }

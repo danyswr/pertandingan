@@ -1044,9 +1044,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/tournament/athlete-groups/:id/athletes', async (req, res) => {
     try {
       const groupId = parseInt(req.params.id);
+      
+      // First sync from Google Sheets to ensure we have the latest data
+      console.log(`Syncing group athletes from Google Sheets for group ${groupId}...`);
+      try {
+        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          action: 'getGroupAthletes',
+          groupId: groupId.toString()
+        });
+        
+        if (data && data.success && data.data && Array.isArray(data.data)) {
+          console.log(`Found ${data.data.length} total rows in daftar_kelompok sheet`);
+          
+          // Filter rows for this specific group (skip header row at index 0)
+          const filteredRows = data.data.slice(1).filter(row => {
+            return row && row.length >= 2 && parseInt(row[1]) === groupId;
+          });
+          
+          console.log(`Found ${filteredRows.length} athletes for group ${groupId} after filtering`);
+          
+          for (const row of filteredRows) {
+            if (row && row.length >= 8) {
+              const groupAthleteId = parseInt(row[0]);
+              const athleteId = parseInt(row[1]); // This is actually the group ID, not athlete ID
+              const athleteName = row[2];
+              const weight = parseFloat(row[3]) || 0;
+              const height = parseFloat(row[4]) || 0;
+              const belt = row[5] || '';
+              const age = parseInt(row[6]) || 0;
+              const position = row[7] || '';
+              const queueOrder = parseInt(row[8]) || 1;
+              const hasMedal = row[9] === 'TRUE' || row[9] === 'true';
+              
+              if (groupAthleteId && athleteName) {
+                // For daftar_kelompok sheet, we need to match by name from the main athletes sheet
+                // First, get all athletes to find the one with matching name
+                const allAthletes = await storage.getAllAthletes();
+                let matchingAthlete = allAthletes.find(a => a.name === athleteName);
+                
+                if (!matchingAthlete) {
+                  // Create athlete if not found, using a unique ID
+                  console.log(`Creating athlete ${athleteName} from Google Sheets data`);
+                  matchingAthlete = await storage.createAthlete({
+                    name: athleteName,
+                    gender: 'Unknown',
+                    birthDate: '2000-01-01',
+                    dojang: 'Unknown',
+                    belt: belt,
+                    weight: weight,
+                    height: height,
+                    category: '',
+                    class: '',
+                    isPresent: false,
+                    status: 'available'
+                  });
+                }
+                
+                // Check if this group athlete already exists
+                const existingGroupAthletes = await storage.getGroupAthletesByGroup(groupId);
+                const exists = existingGroupAthletes.find(ga => ga.athleteId === matchingAthlete.id);
+                
+                if (!exists) {
+                  console.log(`Adding athlete ${athleteName} to group ${groupId} from Google Sheets`);
+                  await storage.addAthleteToGroup({
+                    groupId: groupId,
+                    athleteId: matchingAthlete.id,
+                    position: position || 'queue',
+                    queueOrder: queueOrder,
+                    isEliminated: false,
+                    hasMedal: hasMedal
+                  });
+                }
+              }
+            }
+          }
+          console.log(`Successfully synced group athletes for group ${groupId}`);
+        }
+      } catch (syncError) {
+        console.error('Failed to sync group athletes from Google Sheets:', syncError);
+      }
+      
+      // Now get the local data
       const groupAthletes = await storage.getGroupAthletesByGroup(groupId);
+      console.log(`Returning ${groupAthletes.length} group athletes for group ${groupId}`);
       res.json(groupAthletes);
     } catch (error) {
+      console.error('Error in get group athletes:', error);
       res.status(500).json({ error: 'Failed to fetch group athletes' });
     }
   });

@@ -60,11 +60,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function fetchFromGoogleSheets(url: string, params: Record<string, string> = {}) {
     try {
       const cacheKey = `${url}?${new URLSearchParams(params).toString()}`;
+      console.log(`Fetching from Google Sheets with params:`, params);
       
       // Check cache first
       if (dataCache.has(cacheKey)) {
         const cached = dataCache.get(cacheKey)!;
         if (Date.now() - cached.timestamp < CACHE_DURATION) {
+          console.log(`Using cached data for ${params.action || 'GET'}`);
           return cached.data;
         } else {
           dataCache.delete(cacheKey);
@@ -77,7 +79,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 detik timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik timeout
+      
+      console.log(`Making request to: ${urlWithParams.toString()}`);
       
       const response = await fetch(urlWithParams.toString(), {
         method: 'GET',
@@ -92,10 +96,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       clearTimeout(timeoutId);
       
       if (!response.ok) {
+        console.error(`Google Sheets API error: ${response.status} ${response.statusText}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log(`Google Sheets response for ${params.action || 'GET'}:`, JSON.stringify(data, null, 2));
       
       // Cache hasil untuk permintaan selanjutnya
       dataCache.set(cacheKey, { data, timestamp: Date.now() });
@@ -253,15 +259,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Helper function to sync tournament data to Google Sheets
   async function syncTournamentToGoogleSheets(action: string, data: any) {
     try {
-      console.log(`Syncing tournament data to Google Sheets: ${action}`);
+      console.log(`Syncing tournament data to Google Sheets: ${action}`, data);
 
       const postData = new URLSearchParams({
         action: action,
         ...data
       });
 
+      console.log(`POST data being sent:`, postData.toString());
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
 
       const response = await fetch(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
         method: 'POST',
@@ -277,20 +285,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!response.ok) {
         const responseText = await response.text();
-        console.error(`Google Sheets tournament sync error: ${responseText}`);
+        console.error(`Google Sheets tournament sync error: ${response.status} ${response.statusText} - ${responseText}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const responseText = await response.text();
-      console.log(`Google Sheets tournament sync response: ${responseText}`);
+      console.log(`Google Sheets tournament sync raw response: ${responseText}`);
 
       try {
         const result = JSON.parse(responseText);
-        console.log('Google Sheets tournament sync result:', result);
+        console.log('Google Sheets tournament sync parsed result:', result);
         return result;
       } catch (parseError) {
-        console.error('Failed to parse Google Sheets response:', parseError);
-        return { success: false, error: 'Invalid response format' };
+        console.error('Failed to parse Google Sheets response:', parseError, 'Raw response:', responseText);
+        return { success: false, error: 'Invalid response format', rawResponse: responseText };
       }
     } catch (error) {
       console.error('Failed to sync tournament data to Google Sheets:', error);
@@ -737,19 +745,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Main Categories (Kategori_utama)
   app.get('/api/tournament/main-categories', async (req, res) => {
     try {
+      console.log('Loading main categories from Google Sheets...');
+      
       // Clear cache and fetch fresh data from Google Sheets
       dataCache.clear();
       
-      // Always sync from Google Sheets to get the latest data
+      // First try to fetch directly from Google Sheets
       try {
-        await storage.syncMainCategoriesFromGoogleSheets();
+        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          action: 'getMainCategories'
+        });
+        
+        console.log('Google Sheets main categories response:', data);
+        
+        if (data && data.success && data.data && Array.isArray(data.data)) {
+          console.log(`Loaded ${data.data.length} main categories from Google Sheets`);
+          
+          // Sync each category to local storage
+          for (const categoryData of data.data) {
+            if (categoryData.id && categoryData.name) {
+              const existingCategory = await storage.getMainCategoryById(categoryData.id);
+              if (!existingCategory) {
+                await storage.createMainCategory({
+                  id: categoryData.id,
+                  name: categoryData.name
+                });
+              } else {
+                await storage.updateMainCategory(categoryData.id, {
+                  name: categoryData.name
+                });
+              }
+            }
+          }
+        } else {
+          console.log('No categories from Google Sheets, creating default categories');
+          // Create default categories if none found
+          const existingCategories = await storage.getAllMainCategories();
+          if (existingCategories.length === 0) {
+            await storage.createMainCategory({ id: 1, name: 'kyorugi' });
+            await storage.createMainCategory({ id: 2, name: 'poomsae' });
+          }
+        }
       } catch (syncError) {
-        console.warn('Failed to sync main categories from Google Sheets:', syncError);
+        console.error('Failed to sync main categories from Google Sheets:', syncError);
+        
+        // Fallback: create default categories if none exist
+        const existingCategories = await storage.getAllMainCategories();
+        if (existingCategories.length === 0) {
+          await storage.createMainCategory({ id: 1, name: 'kyorugi' });
+          await storage.createMainCategory({ id: 2, name: 'poomsae' });
+        }
       }
       
       const categories = await storage.getAllMainCategories();
+      console.log(`Returning ${categories.length} main categories:`, categories);
       res.json(categories);
     } catch (error) {
+      console.error('Error in main categories endpoint:', error);
       res.status(500).json({ error: 'Failed to fetch main categories' });
     }
   });
@@ -835,20 +887,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/tournament/main-categories/:id/sub-categories', async (req, res) => {
     try {
       const mainCategoryId = parseInt(req.params.id);
+      console.log(`Loading sub categories for main category ${mainCategoryId}...`);
       
       // Clear cache and fetch fresh data from Google Sheets
       dataCache.clear();
       
-      // Always sync from Google Sheets to get the latest data
+      // First try to fetch directly from Google Sheets
       try {
-        await storage.syncSubCategoriesFromGoogleSheets(mainCategoryId);
+        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          action: 'getSubCategories',
+          mainCategoryId: mainCategoryId.toString()
+        });
+        
+        console.log('Google Sheets sub categories response:', data);
+        
+        if (data && data.success && data.data && Array.isArray(data.data)) {
+          console.log(`Loaded ${data.data.length} sub categories from Google Sheets for main category ${mainCategoryId}`);
+          
+          // Sync each sub category to local storage
+          for (const subCategoryData of data.data) {
+            if (subCategoryData.id && subCategoryData.name && subCategoryData.mainCategoryId == mainCategoryId) {
+              const existingSubCategory = await storage.getSubCategoryById(subCategoryData.id);
+              if (!existingSubCategory) {
+                await storage.createSubCategory({
+                  id: subCategoryData.id,
+                  mainCategoryId: mainCategoryId,
+                  name: subCategoryData.name,
+                  order: subCategoryData.order || 1
+                });
+              } else {
+                await storage.updateSubCategory(subCategoryData.id, {
+                  name: subCategoryData.name,
+                  order: subCategoryData.order || 1
+                });
+              }
+            }
+          }
+        } else {
+          console.log(`No sub categories found in Google Sheets for main category ${mainCategoryId}`);
+        }
       } catch (syncError) {
-        console.warn('Failed to sync sub categories from Google Sheets:', syncError);
+        console.error('Failed to sync sub categories from Google Sheets:', syncError);
       }
       
       const subCategories = await storage.getSubCategoriesByMainCategory(mainCategoryId);
+      console.log(`Returning ${subCategories.length} sub categories for main category ${mainCategoryId}:`, subCategories);
       res.json(subCategories);
     } catch (error) {
+      console.error('Error in sub categories endpoint:', error);
       res.status(500).json({ error: 'Failed to fetch sub categories' });
     }
   });
@@ -938,18 +1024,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/tournament/sub-categories/:id/athlete-groups', async (req, res) => {
     try {
       const subCategoryId = parseInt(req.params.id);
+      console.log(`Loading athlete groups for sub category ${subCategoryId}...`);
       
       // Always sync from Google Sheets first to get the most current data
       try {
         console.log(`Syncing athlete groups from Google Sheets for sub category ${subCategoryId}...`);
-        await storage.syncAthleteGroupsFromGoogleSheets(subCategoryId);
+        
+        const data = await fetchFromGoogleSheets(GOOGLE_SHEETS_CONFIG.MANAGEMENT_API, {
+          action: 'getAthleteGroups',
+          subCategoryId: subCategoryId.toString()
+        });
+        
+        console.log('Google Sheets athlete groups response:', data);
+        
+        if (data && data.success && data.data && Array.isArray(data.data)) {
+          console.log(`Loaded ${data.data.length} athlete groups from Google Sheets for sub category ${subCategoryId}`);
+          
+          // Sync each athlete group to local storage
+          for (const athleteGroupData of data.data) {
+            if (athleteGroupData.id && athleteGroupData.name && athleteGroupData.subCategoryId == subCategoryId) {
+              const existingAthleteGroup = await storage.getAthleteGroupById(athleteGroupData.id);
+              if (!existingAthleteGroup) {
+                await storage.createAthleteGroup({
+                  id: athleteGroupData.id,
+                  subCategoryId: subCategoryId,
+                  name: athleteGroupData.name,
+                  description: athleteGroupData.description || '',
+                  matchNumber: athleteGroupData.matchNumber || 1,
+                  isActive: true
+                });
+              } else {
+                await storage.updateAthleteGroup(athleteGroupData.id, {
+                  name: athleteGroupData.name,
+                  description: athleteGroupData.description || '',
+                  matchNumber: athleteGroupData.matchNumber || 1
+                });
+              }
+            }
+          }
+        } else {
+          console.log(`No athlete groups found in Google Sheets for sub category ${subCategoryId}`);
+        }
+        
         console.log(`Successfully synced athlete groups for sub category ${subCategoryId}`);
       } catch (syncError) {
-        console.warn('Failed to sync athlete groups from Google Sheets:', syncError);
+        console.error('Failed to sync athlete groups from Google Sheets:', syncError);
       }
       
       const athleteGroups = await storage.getAthleteGroupsBySubCategory(subCategoryId);
-      console.log(`Returning ${athleteGroups.length} athlete groups for sub category ${subCategoryId}`);
+      console.log(`Returning ${athleteGroups.length} athlete groups for sub category ${subCategoryId}:`, athleteGroups);
       res.json(athleteGroups);
     } catch (error) {
       console.error('Error fetching athlete groups:', error);

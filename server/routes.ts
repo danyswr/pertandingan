@@ -1083,18 +1083,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           for (const row of filteredRows) {
             if (row && row.length >= 8) {
-              const groupAthleteId = parseInt(row[0]);
-              const athleteId = parseInt(row[1]); // This is actually the group ID, not athlete ID
-              const athleteName = row[2];
-              const weight = parseFloat(row[3]) || 0;
-              const height = parseFloat(row[4]) || 0;
-              const belt = row[5] || '';
-              const age = parseInt(row[6]) || 0;
-              const position = row[7] || '';
-              const queueOrder = parseInt(row[8]) || 1;
-              const hasMedal = row[9] === 'TRUE' || row[9] === 'true';
+              const groupAthleteId = parseInt(row[0]); // A: id_daftarKelompok
+              const athleteGroupId = parseInt(row[1]); // B: id_kelompokAtlet
+              const athleteName = row[2]; // C: nama_atlet
+              const weight = parseFloat(row[3]) || 0; // D: Berat_badan
+              const height = parseFloat(row[4]) || 0; // E: Tinggi_badan
+              const belt = row[5] || ''; // F: sabuk
+              const position = row[6] || ''; // G: M/B (merah/biru/antri)
+              const queueOrder = parseInt(row[7]) || 1; // H: Nomor
+              const age = parseInt(row[8]) || 0; // I: umur
+              const hasMedal = row[9] === 'TRUE' || row[9] === 'true'; // J: Mendali
               
-              if (groupAthleteId && athleteName) {
+              console.log(`Row ${groupAthleteId}: Name=${athleteName}, Position=${position}, Weight=${weight}, Belt=${belt}`);
+              
+              if (groupAthleteId && athleteName && athleteGroupId === groupId) {
                 // For daftar_kelompok sheet, we need to match by name from the main athletes sheet
                 // First, get all athletes to find the one with matching name
                 const allAthletes = await storage.getAllAthletes();
@@ -1107,13 +1109,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     name: athleteName,
                     gender: 'Unknown',
                     birthDate: '2000-01-01',
-                    dojang: 'Unknown',
+                    dojang: 'UPJ', // Default dojang from data
                     belt: belt,
                     weight: weight,
                     height: height,
                     category: '',
                     class: '',
-                    isPresent: false,
+                    isPresent: true, // Set as present since they're in tournament
                     status: 'available'
                   });
                 }
@@ -1123,15 +1125,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const exists = existingGroupAthletes.find(ga => ga.athleteId === matchingAthlete.id);
                 
                 if (!exists) {
-                  console.log(`Adding athlete ${athleteName} to group ${groupId} from Google Sheets`);
+                  console.log(`Adding athlete ${athleteName} to group ${groupId} with position: ${position}`);
+                  
+                  // Convert Indonesian position labels to English
+                  let convertedPosition = position;
+                  if (position === 'merah') convertedPosition = 'red';
+                  else if (position === 'biru') convertedPosition = 'blue';
+                  else if (position === 'antri' || position === '') convertedPosition = 'queue';
+                  
                   await storage.addAthleteToGroup({
                     groupId: groupId,
                     athleteId: matchingAthlete.id,
-                    position: position || '', // Let storage auto-assign position
+                    position: convertedPosition,
                     queueOrder: queueOrder,
                     isEliminated: false,
                     hasMedal: hasMedal
                   });
+                } else {
+                  // Update existing athlete position if needed
+                  let convertedPosition = position;
+                  if (position === 'merah') convertedPosition = 'red';
+                  else if (position === 'biru') convertedPosition = 'blue';
+                  else if (position === 'antri' || position === '') convertedPosition = 'queue';
+                  
+                  if (exists.position !== convertedPosition) {
+                    console.log(`Updating athlete ${athleteName} position from ${exists.position} to ${convertedPosition}`);
+                    await storage.updateAthletePosition(groupId, matchingAthlete.id, convertedPosition, queueOrder);
+                  }
                 }
               }
             }

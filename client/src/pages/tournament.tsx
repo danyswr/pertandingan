@@ -367,7 +367,9 @@ export default function Tournament() {
     mutationFn: api.deleteAthleteGroup,
     onSuccess: () => {
       toast({ title: "Berhasil", description: "Kelompok atlet berhasil dihapus" });
+      // Force refetch to ensure fresh data from server/Google Sheets
       queryClient.invalidateQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
+      queryClient.refetchQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal menghapus kelompok atlet", variant: "destructive" });
@@ -405,7 +407,9 @@ export default function Tournament() {
       toast({ title: "Berhasil", description: "Kelompok atlet berhasil diperbarui" });
       setShowEditAthleteGroup(false);
       setEditingGroup(null);
+      // Force refetch to ensure fresh data from server/Google Sheets
       queryClient.invalidateQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
+      queryClient.refetchQueries({ queryKey: ['athlete-groups', selectedSubCategory?.id] });
     },
     onError: () => {
       toast({ title: "Gagal", description: "Gagal memperbarui kelompok atlet", variant: "destructive" });
@@ -1487,9 +1491,12 @@ export default function Tournament() {
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedAthleteGroup(group);
-                        setEditingGroup(group);
-                        setShowEditAthleteGroup(true);
+                        // Use setTimeout to prevent blocking the UI
+                        setTimeout(() => {
+                          setSelectedAthleteGroup(group);
+                          setEditingGroup(group);
+                          setShowEditAthleteGroup(true);
+                        }, 0);
                       }}
                     >
                       <Edit className="h-4 w-4 mr-2" />

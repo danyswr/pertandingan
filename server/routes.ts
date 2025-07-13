@@ -938,16 +938,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const subCategoryId = parseInt(req.params.id);
       
-      // First try to sync from Google Sheets to get latest data
+      // Always sync from Google Sheets first to get the most current data
       try {
+        console.log(`Syncing athlete groups from Google Sheets for sub category ${subCategoryId}...`);
         await storage.syncAthleteGroupsFromGoogleSheets(subCategoryId);
+        console.log(`Successfully synced athlete groups for sub category ${subCategoryId}`);
       } catch (syncError) {
         console.warn('Failed to sync athlete groups from Google Sheets:', syncError);
       }
       
       const athleteGroups = await storage.getAthleteGroupsBySubCategory(subCategoryId);
+      console.log(`Returning ${athleteGroups.length} athlete groups for sub category ${subCategoryId}`);
       res.json(athleteGroups);
     } catch (error) {
+      console.error('Error fetching athlete groups:', error);
       res.status(500).json({ error: 'Failed to fetch athlete groups' });
     }
   });
